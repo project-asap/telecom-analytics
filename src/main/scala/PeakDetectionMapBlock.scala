@@ -1,5 +1,3 @@
-package asap
-
 import java.util.Calendar
 import java.text.SimpleDateFormat
 import java.lang.Math
@@ -23,7 +21,7 @@ object PeakDetectionMapBlock {
   def main(args: Array[String]) {
 
     val appName = this.getClass().getSimpleName
-    val usage = (s"Usage: submit.sh ${appName} <master> <cdr_location> <output_location> <base_since (${date_pattern})> <base_until (${date_pattern})> <max_cores> <driver_mem> <executor_mem>>")
+    val usage = (s"Usage: submit.sh ${appName} <master> <cdr_location> <output_location> <base_since (${date_pattern})> <base_until (${date_pattern})> <max_cores> <driver_mem> <executor_mem>")
 
     if (args.length != 8) {
       System.err.println(usage)
