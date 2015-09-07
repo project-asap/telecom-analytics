@@ -79,7 +79,9 @@ object PeakDetectionMapBlock {
             }
             case None => None 
         }
-    }}.filter(_ != None)
+      }
+      case _ => None // ignore unexpected input
+    }.filter(_ != None)
     cdr.saveAsTextFile(output_location + "/cdr")
 
     val data_raw = cdr.mapBlock( array1 =>

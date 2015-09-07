@@ -78,6 +78,7 @@ object PeakDetectionSpark {
                 case None => None 
             }
          }
+        case _ => None // ignore unexpected input
      }.filter(_ != None)
      cdr.saveAsTextFile(output_location + "/cdr")
 

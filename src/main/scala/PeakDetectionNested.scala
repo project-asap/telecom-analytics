@@ -76,7 +76,9 @@ object PeakDetectionNested {
             }
             case None => None 
         }
-    }}.filter(_ != None)
+      }
+      case _ => None // ignore unexpected input
+    }.filter(_ != None)
     cdr.saveAsTextFile(output_location + "/cdr")
 
     val data_raw = cdr.map{case (id:String, hour:Int, dow:Int, doy:Int) =>
