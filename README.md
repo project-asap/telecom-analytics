@@ -1,5 +1,4 @@
-# asap-pd
-Spark Application for peak detection in call detail records
+An analytics application on WIND telecommunications customer data (Telecommunications Data Analytics, TDA), targeted towards tourism and mobility scenarios applications.
 
 Build using sbt:
 sbt assembly
