@@ -3,8 +3,6 @@ import scala.util.Try
 import org.joda.time.{DateTime, DateTimeConstants}
 import org.joda.time.format.DateTimeFormat
 
-abstract class Parsable[T]
-
 case class Call(
   val cdrType: String,
   val callingPartyNumberKey: String,
@@ -86,6 +84,13 @@ case class Key(
   val id: String,
   val hour: Int,
   val dow: Int
+)
+
+case class Event(
+  val k: Key,
+  val ratio: Double,
+  val aNum: Double,
+  val bNum: Double
 )
 
 case class SpaceTimeCall(
