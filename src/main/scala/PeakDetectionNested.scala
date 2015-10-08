@@ -24,26 +24,25 @@ object PeakDetectionNested extends PeakDetection{
   def main(args: Array[String]) {
     val appName = this.getClass().getSimpleName
     val usage = (s"Usage: submit.sh ${appName} <master> <cdrLocation> " +
-                 "<voronoi> <outputLocation> " +
+                 "<outputLocation> " +
                  s"<baseSince (${Call.datePattern})> " +
                  s"<baseUntil (${Call.datePattern})> " +
                  "<maxCores> <driverMem> " +
                  "<executorMem>")
 
-    if (args.length != 9) {
+    if (args.length != 8) {
       System.err.println(usage)
       System.exit(1)
     }
 
     val master = args(0)
     val f = args(1)
-    val voronoi = args(2).split(",")
-    val outputLocation=args(3)
-    val baseSince = Call.dateFormat.parseDateTime(args(4))
-    val baseUntil = Call.dateFormat.parseDateTime(args(5))
-    val maxCores = args(6)
-    val driverMem = args(7)
-    val executorMem = args(8)
+    val outputLocation=args(2)
+    val baseSince = Call.dateFormat.parseDateTime(args(3))
+    val baseUntil = Call.dateFormat.parseDateTime(args(4))
+    val maxCores = args(5)
+    val driverMem = args(6)
+    val executorMem = args(7)
 
     val conf = new SparkConf()
       .setAppName(appName)
@@ -55,6 +54,6 @@ object PeakDetectionNested extends PeakDetection{
 
     val data = sc.textFile(f)
 
-    run(data, voronoi, baseSince, baseUntil, outputLocation)
+    run(data, baseSince, baseUntil, outputLocation)
   }
 }
