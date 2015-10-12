@@ -34,6 +34,9 @@ class PeakDetection extends Serializable{
       .map { case(cdr, num) => DataRaw(cdr, num) }
   }
 
+  def calcVoronoi(cdr: RDD[_]) =
+    cdr.map{ case CDR(id, _, _, _) => id }.distinct.take(10)
+
   def calcCpBase(dataRaw: RDD[DataRaw], voronoi: Array[String],
                  since: DateTime, until: DateTime) = {
     dataRaw
@@ -96,7 +99,8 @@ class PeakDetection extends Serializable{
     val dataRaw = calcDataRaws(cdr)
     dataRaw.saveAsTextFile(outputLocation + "/dataRaw")
 
-    val voronoi = cdr.map{ case CDR(id, _, _, _) => id }.distinct.take(10)
+    val voronoi = calcVoronoi(cdr)
+
     val cpBase = calcCpBase(dataRaw, voronoi, since, until)
     cpBase.saveAsTextFile(outputLocation + "/cpBase")
 

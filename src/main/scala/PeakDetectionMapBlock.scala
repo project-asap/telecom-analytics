@@ -12,12 +12,20 @@ import org.apache.spark.rdd.RDD
 
 import org.joda.time.format.DateTimeFormat
 
-object PeakDetectionMapBlock extends PeakDetection{
+object PeakDetectionMapBlock extends PeakDetectionNested{
   override def calcDataRaws(cdr: RDD[_]) = {
-    cdr.mapBlock( array1 =>
-      array1.groupBy(e => e).map{ case(k, v) => (k, v.length)  }.toArray
-    ).groupByKey.map{ case (cdr@CDR(_, _, _, _), buff: Iterable[Int]) =>
-      DataRaw(cdr, buff.reduce(_+_))
+    val tmp = cdr.mapBlock( array1 => {
+      cdr.mapBlock( array2 => {
+        array1.map(e => {
+          val num = array2.filter(e2 => {
+            e == e2
+          }).size
+          (e, num)
+        })
+      }).collect()
+    })
+    tmp.distinct.reduceByKey(_+_).map{ case ((id:String, hour:Int, dow:Int, doy:Int), num: Int) =>
+      new DataRaw(id, hour, dow, doy, num)
     }
   }
 
