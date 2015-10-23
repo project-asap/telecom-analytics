@@ -1,15 +1,70 @@
+import scala.util.{Try, Success, Failure}
+
 import java.text.SimpleDateFormat
-import java.lang.Math
 
 import com.typesafe.config.{Config, ConfigValueFactory}
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 import org.joda.time.DateTime
 
+import scala.util.Try
+
+case class Settings(
+    val master: String,
+    val inputFile: String,
+    val outputLocation: String,
+    val baseSince: DateTime,
+    val baseUntil: DateTime,
+    val driverMem: String,
+    val executorMem: String,
+    val partitions: Int,
+    val persist: Boolean,
+    val saveIntermediate: Boolean
+)
+object Settings {
+  private def parseDate = s => Call.dateFormat.parseDateTime(s)
+
+  def apply(args: Array[String]) = {
+    new Settings(
+      args(0),
+      args(1),
+      args(2),
+      parseDate(args(3)),
+      parseDate(args(4)),
+      args(5),
+      args(6),
+      args(7).toInt,
+      Try(args(8).toBoolean).getOrElse(false),
+      Try(args(9).toBoolean).getOrElse(false)
+    )
+  }
+}
+
 class PeakDetection extends Serializable{
+  val appName = this.getClass().getSimpleName
+  val usage = (s"Usage: submit.sh ${appName} " +
+               "<master> <cdrLocation> <outputLocation> " +
+               s"<baseSince (${Call.datePattern})> " +
+               s"<baseUntil (${Call.datePattern})>")
+
+  def configure(args: Array[String]): Try[(Settings, RDD[String])] = {
+    Try {
+      val props = Settings(args)
+      val conf = new SparkConf()
+        .setAppName(appName)
+        .setMaster(props.master)
+        .set("spark.driver.memory", props.driverMem)
+        .set("spark.executor.memory", props.executorMem)
+      val sc = new SparkContext(conf)
+      val data = sc.textFile(props.inputFile)
+      (props, data)
+    }
+  }
+
   def parse(l: String, delim: String = ";") = {
     val a = l.split(delim, -1).map(_.trim)
     Call(a).getOrElse(None)
@@ -92,64 +147,48 @@ class PeakDetection extends Serializable{
   }
 
   def run(data: RDD[String], since: DateTime, until: DateTime,
-          outputLocation: String) {
+          outputLocation: String, persist: Boolean = false,
+          saveIntermediate: Boolean = false) {
     val cdr = calcCDR(data)
-    cdr.saveAsTextFile(outputLocation + "/cdr")
+    if (persist) cdr.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (saveIntermediate) cdr.saveAsTextFile(outputLocation + "/cdr")
 
     val dataRaw = calcDataRaws(cdr)
-    dataRaw.saveAsTextFile(outputLocation + "/dataRaw")
+    if (persist) dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (saveIntermediate) dataRaw.saveAsTextFile(outputLocation + "/dataRaw")
 
     val voronoi = calcVoronoi(cdr)
+    //voronoi.saveAsTextFile(outputLocation + "/cpBase")
 
     val cpBase = calcCpBase(dataRaw, voronoi, since, until)
-    cpBase.saveAsTextFile(outputLocation + "/cpBase")
+    if (persist) cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (saveIntermediate) cpBase.saveAsTextFile(outputLocation + "/cpBase")
 
     val cpAnalyze = calcCpAnalyze(dataRaw, voronoi)
-    cpAnalyze.saveAsTextFile(outputLocation + "/cpAnalyze")
+    if (persist) cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (saveIntermediate) cpAnalyze.saveAsTextFile(outputLocation + "/cpAnalyze")
 
     val events = calcEvents(cpBase, cpAnalyze)
-    events.saveAsTextFile(outputLocation + "/events")
+    if (persist) events.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (saveIntermediate) events.saveAsTextFile(outputLocation + "/events")
+    println(s"Found ${events.count} events.")
+    //events.foreach(println(_))
 
     val eventsFilter = calcEventsFilter(events)
-    eventsFilter.saveAsTextFile(outputLocation + "/eventsFilter")
+    if (saveIntermediate) eventsFilter.saveAsTextFile(outputLocation + "/eventsFilter")
+    println(s"Found ${eventsFilter.count} events after filtering.")
+    //eventsFilter.foreach(println(_))
   }
 }
 
 object PeakDetectionSpark extends PeakDetection {
   def main(args: Array[String]) {
-    val appName = this.getClass().getSimpleName
-    val usage = (s"Usage: submit.sh ${appName} <master> <cdrLocation> " +
-                 "<outputLocation> " +
-                 s"<baseSince (${Call.datePattern})> " +
-                 s"<baseUntil (${Call.datePattern})> " +
-                 "<maxCores> <driverMem> " +
-                 "<executorMem>")
-
-    if (args.length != 8) {
-      System.err.println(usage)
-      System.exit(1)
+    configure(args) match {
+      case Success((props: Settings, data: RDD[_])) =>
+        run(data, props.baseSince, props.baseUntil, props.outputLocation, props.persist, props.saveIntermediate)
+      case Failure(e) =>
+        System.err.println(this.usage)
+        System.exit(1)
     }
-
-    val master = args(0)
-    val f = args(1)
-    val outputLocation=args(2)
-    val baseSince = Call.dateFormat.parseDateTime(args(3))
-    val baseUntil = Call.dateFormat.parseDateTime(args(4))
-    val maxCores = args(5)
-    val driverMem = args(6)
-    val executorMem = args(7)
-
-    val conf = new SparkConf()
-      .setAppName(appName)
-      .setMaster(master)
-      .set("spark.cores.max", maxCores)
-      .set("spark.driver.memory", driverMem)
-      .set("spark.executor.memory", executorMem)
-    val sc = new SparkContext(conf)
-
-    val data = sc.textFile(f)
-
-    run(data, baseSince, baseUntil, outputLocation)
   }
-
 }

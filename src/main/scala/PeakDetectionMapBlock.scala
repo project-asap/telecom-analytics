@@ -30,38 +30,12 @@ object PeakDetectionMapBlock extends PeakDetectionNested{
   }
 
   def main(args: Array[String]) {
-    val appName = this.getClass().getSimpleName
-    val usage = (s"Usage: submit.sh ${appName} <master> <cdrLocation> " +
-                 "<outputLocation> " +
-                 s"<baseSince (${Call.datePattern})> " +
-                 s"<baseUntil (${Call.datePattern})> " +
-                 "<maxCores> <driverMem> " +
-                 "<executorMem>")
-
-    if (args.length != 8) {
-      System.err.println(usage)
-      System.exit(1)
+    configure(args) match {
+      case Success((props: Settings, data: RDD[_])) =>
+        run(data, props.baseSince, props.baseUntil, props.outputLocation, props.persist, props.saveIntermediate)
+      case Failure(e) =>
+        System.err.println(this.usage)
+        System.exit(1)
     }
-
-    val master = args(0)
-    val f = args(1)
-    val outputLocation=args(2)
-    val baseSince = Call.dateFormat.parseDateTime(args(3))
-    val baseUntil = Call.dateFormat.parseDateTime(args(4))
-    val maxCores = args(5)
-    val driverMem = args(6)
-    val executorMem = args(7)
-
-    val conf = new SparkConf()
-      .setAppName(appName)
-      .setMaster(master)
-      .set("spark.cores.max", maxCores)
-      .set("spark.driver.memory", driverMem)
-      .set("spark.executor.memory", executorMem)
-    val sc = new SparkContext(conf)
-
-    val data = sc.textFile(f)
-
-    run(data, baseSince, baseUntil, outputLocation)
   }
 }
