@@ -1,3 +1,5 @@
+package pd
+
 import scala.util.{Try, Success, Failure}
 
 import java.text.SimpleDateFormat
@@ -49,9 +51,14 @@ class PeakDetection extends Serializable{
   val usage = (s"Usage: submit.sh ${appName} " +
                "<master> <cdrLocation> <outputLocation> " +
                s"<baseSince (${Call.datePattern})> " +
-               s"<baseUntil (${Call.datePattern})>")
+               s"<baseUntil (${Call.datePattern})> " +
+               "<driverMem> " +
+              "<executorMem> " +
+              "<partitions> " +
+              "<persist> " +
+              "<saveIntermediate>")
 
-  def configure(args: Array[String]): Try[(Settings, RDD[String])] = {
+  def configure(args: Array[String]): Try[(Settings, RDD[String], SparkContext)] = {
     Try {
       val props = Settings(args)
       val conf = new SparkConf()
@@ -61,7 +68,7 @@ class PeakDetection extends Serializable{
         .set("spark.executor.memory", props.executorMem)
       val sc = new SparkContext(conf)
       val data = sc.textFile(props.inputFile)
-      (props, data)
+      (props, data, sc)
     }
   }
 
@@ -146,46 +153,45 @@ class PeakDetection extends Serializable{
     }
   }
 
-  def run(data: RDD[String], since: DateTime, until: DateTime,
-          outputLocation: String, persist: Boolean = false,
-          saveIntermediate: Boolean = false) {
+  def run(props: Settings, data: RDD[String], sc: SparkContext) = {
     val cdr = calcCDR(data)
-    if (persist) cdr.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (saveIntermediate) cdr.saveAsTextFile(outputLocation + "/cdr")
+    if (props.persist) cdr.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (props.saveIntermediate) cdr.saveAsTextFile(props.outputLocation + "/cdr")
 
     val dataRaw = calcDataRaws(cdr)
-    if (persist) dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (saveIntermediate) dataRaw.saveAsTextFile(outputLocation + "/dataRaw")
+    if (props.persist) dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (props.saveIntermediate) dataRaw.saveAsTextFile(props.outputLocation + "/dataRaw")
 
     val voronoi = calcVoronoi(cdr)
-    //voronoi.saveAsTextFile(outputLocation + "/cpBase")
+    //voronoi.saveAsTextFile(props.outputLocation + "/cpBase")
 
-    val cpBase = calcCpBase(dataRaw, voronoi, since, until)
-    if (persist) cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (saveIntermediate) cpBase.saveAsTextFile(outputLocation + "/cpBase")
+    val cpBase = calcCpBase(dataRaw, voronoi, props.baseSince, props.baseUntil)
+    if (props.persist) cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (props.saveIntermediate) cpBase.saveAsTextFile(props.outputLocation + "/cpBase")
 
     val cpAnalyze = calcCpAnalyze(dataRaw, voronoi)
-    if (persist) cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (saveIntermediate) cpAnalyze.saveAsTextFile(outputLocation + "/cpAnalyze")
+    if (props.persist) cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (props.saveIntermediate) cpAnalyze.saveAsTextFile(props.outputLocation + "/cpAnalyze")
 
     val events = calcEvents(cpBase, cpAnalyze)
-    if (persist) events.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (saveIntermediate) events.saveAsTextFile(outputLocation + "/events")
+    if (props.persist) events.persist(StorageLevel.MEMORY_ONLY_SER)
+    if (props.saveIntermediate) events.saveAsTextFile(props.outputLocation + "/events")
     println(s"Found ${events.count} events.")
     //events.foreach(println(_))
 
     val eventsFilter = calcEventsFilter(events)
-    if (saveIntermediate) eventsFilter.saveAsTextFile(outputLocation + "/eventsFilter")
+    if (props.saveIntermediate) eventsFilter.saveAsTextFile(props.outputLocation + "/eventsFilter")
     println(s"Found ${eventsFilter.count} events after filtering.")
     //eventsFilter.foreach(println(_))
+    eventsFilter.collect
   }
 }
 
 object PeakDetectionSpark extends PeakDetection {
   def main(args: Array[String]) {
     configure(args) match {
-      case Success((props: Settings, data: RDD[_])) =>
-        run(data, props.baseSince, props.baseUntil, props.outputLocation, props.persist, props.saveIntermediate)
+      case Success((props: Settings, data: RDD[_], sc)) =>
+        run(props, data, sc)
       case Failure(e) =>
         System.err.println(this.usage)
         System.exit(1)
