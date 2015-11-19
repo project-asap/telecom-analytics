@@ -17,15 +17,14 @@ import scala.util.Try
 
 case class Settings(
     val master: String,
-    val inputFile: String,
-    val outputLocation: String,
-    val baseSince: DateTime,
-    val baseUntil: DateTime,
-    val driverMem: String,
-    val executorMem: String,
-    val partitions: Int,
-    val persist: Boolean,
-    val saveIntermediate: Boolean
+    val cdrPath: String,
+    val output: String,
+    val trainingSince: DateTime,
+    val trainingUntil: DateTime,
+    val testSince: DateTime,
+    val testUntil: Option[DateTime],
+    val voronoiPath: String,
+    val threshold: Double
 )
 object Settings {
   private def parseDate = s => Call.dateFormat.parseDateTime(s)
@@ -37,11 +36,10 @@ object Settings {
       args(2),
       parseDate(args(3)),
       parseDate(args(4)),
-      args(5),
-      args(6),
-      args(7).toInt,
-      Try(args(8).toBoolean).getOrElse(false),
-      Try(args(9).toBoolean).getOrElse(false)
+      parseDate(args(5)),
+      Try(parseDate(args(6))).toOption,
+      args(7),
+      args(8).toDouble
     )
   }
 }
@@ -49,26 +47,22 @@ object Settings {
 class PeakDetection extends Serializable{
   val appName = this.getClass().getSimpleName
   val usage = (s"Usage: submit.sh ${appName} " +
-               "<master> <cdrLocation> <outputLocation> " +
-               s"<baseSince (${Call.datePattern})> " +
-               s"<baseUntil (${Call.datePattern})> " +
-               "<driverMem> " +
-              "<executorMem> " +
-              "<partitions> " +
-              "<persist> " +
-              "<saveIntermediate>")
+               "<master> <cdrPath> <output> " +
+               s"<trainingSince (${Call.datePattern})> " +
+               s"<trainingUntil (${Call.datePattern})> " +
+               s"<testSince (${Call.datePattern})> " +
+               s"<testUntil (${Call.datePattern} or None)> " +
+               "<voronoiPath> " +
+              "<threshold> ")
 
-  def configure(args: Array[String]): Try[(Settings, RDD[String], SparkContext)] = {
+  def configure(args: Array[String]): Try[(Settings, SparkContext)] = {
     Try {
       val props = Settings(args)
       val conf = new SparkConf()
         .setAppName(appName)
         .setMaster(props.master)
-        .set("spark.driver.memory", props.driverMem)
-        .set("spark.executor.memory", props.executorMem)
       val sc = new SparkContext(conf)
-      val data = sc.textFile(props.inputFile)
-      (props, data, sc)
+      (props, sc)
     }
   }
 
@@ -77,27 +71,19 @@ class PeakDetection extends Serializable{
     Call(a).getOrElse(None)
   }
 
-  def calcCDR(data: RDD[String]) = {
-    data.filter(_.length != 0).map(parse(_)).map{
+  def calcDataRaws(data: RDD[String]) = {
+    val zero = scala.collection.mutable.Set[String]()
+    data.filter(_.length != 0).map(parse(_)).filter(_ != None).map{
       case c@Call(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) =>
-        CDR(
-          c.cellId1stCellCalling,
-          c.dateTime.getHourOfDay,
-          c.dateTime.getDayOfWeek,
-          c.dateTime.getDayOfYear
-        )
-      case _ => None
-     }.filter(_ != None)
+        ((c.cellId1stCellCalling, c.dateTime), c.callingPartyNumberKey)
+     }.aggregateByKey(zero)(
+      (set, v) => set += v,
+      (set1, set2) => set1 ++= set2
+    ).map{ case ((cellId, dt), set) =>
+      DataRaw(CDR(cellId, dt.getHourOfDay, dt.getDayOfWeek, dt.getDayOfYear),
+              set.size)
+    }
   }
-
-  def calcDataRaws(cdr: RDD[_]) = {
-    cdr.map{ case cdr@CDR(_,_,_,_) => (cdr, 1) }
-      .aggregateByKey(0)(_ + _, _ + _)
-      .map { case(cdr, num) => DataRaw(cdr, num) }
-  }
-
-  def calcVoronoi(cdr: RDD[_]) =
-    cdr.map{ case CDR(id, _, _, _) => id }.distinct.take(10)
 
   def calcCpBase(dataRaw: RDD[DataRaw], voronoi: Array[String],
                  since: DateTime, until: DateTime) = {
@@ -153,45 +139,41 @@ class PeakDetection extends Serializable{
     }
   }
 
-  def run(props: Settings, data: RDD[String], sc: SparkContext) = {
-    val cdr = calcCDR(data)
-    if (props.persist) cdr.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (props.saveIntermediate) cdr.saveAsTextFile(props.outputLocation + "/cdr")
+  def run(props: Settings, sc: SparkContext) = {
+    val data = sc.textFile(props.cdrPath)
+    val voronoi = sc.textFile(props.voronoiPath).collect
 
-    val dataRaw = calcDataRaws(cdr)
-    if (props.persist) dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (props.saveIntermediate) dataRaw.saveAsTextFile(props.outputLocation + "/dataRaw")
+    val dataRaw = calcDataRaws(data)
+    dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
+    dataRaw.saveAsTextFile(props.output + "/dataRaw")
 
-    val voronoi = calcVoronoi(cdr)
-    //voronoi.saveAsTextFile(props.outputLocation + "/cpBase")
-
-    val cpBase = calcCpBase(dataRaw, voronoi, props.baseSince, props.baseUntil)
-    if (props.persist) cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (props.saveIntermediate) cpBase.saveAsTextFile(props.outputLocation + "/cpBase")
+    /*
+    val cpBase = calcCpBase(dataRaw, voronoi, props.trainingSince, props.trainingUntil)
+    cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
+    cpBase.saveAsTextFile(props.output + "/cpBase")
 
     val cpAnalyze = calcCpAnalyze(dataRaw, voronoi)
-    if (props.persist) cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (props.saveIntermediate) cpAnalyze.saveAsTextFile(props.outputLocation + "/cpAnalyze")
+    cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
+    cpAnalyze.saveAsTextFile(props.output + "/cpAnalyze")
 
     val events = calcEvents(cpBase, cpAnalyze)
-    if (props.persist) events.persist(StorageLevel.MEMORY_ONLY_SER)
-    if (props.saveIntermediate) events.saveAsTextFile(props.outputLocation + "/events")
+    events.persist(StorageLevel.MEMORY_ONLY_SER)
+    events.saveAsTextFile(props.output + "/events")
     println(s"Found ${events.count} events.")
-    //events.foreach(println(_))
 
     val eventsFilter = calcEventsFilter(events)
-    if (props.saveIntermediate) eventsFilter.saveAsTextFile(props.outputLocation + "/eventsFilter")
+    eventsFilter.saveAsTextFile(props.output + "/eventsFilter")
     println(s"Found ${eventsFilter.count} events after filtering.")
-    //eventsFilter.foreach(println(_))
     eventsFilter.collect
+    */
   }
 }
 
 object PeakDetectionSpark extends PeakDetection {
   def main(args: Array[String]) {
     configure(args) match {
-      case Success((props: Settings, data: RDD[_], sc)) =>
-        run(props, data, sc)
+      case Success((props: Settings, sc: SparkContext)) =>
+        run(props, sc)
       case Failure(e) =>
         System.err.println(this.usage)
         System.exit(1)

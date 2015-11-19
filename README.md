@@ -2,6 +2,6 @@ An analytics application on WIND telecommunications customer data (Telecommunica
 
 Build using sbt:
 
-sbt package
+    sbt package
 
 Execute as Spark Application using the submit.sh script.

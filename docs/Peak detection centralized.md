@@ -26,7 +26,9 @@ This information is already aggregated from the CDR which reduce the privacy ris
 ![Image](/docs/PeakDetectionCentralized.png)
 
 Parameters:
+
 The period to be considered for the training (i.e. doy>=1 and doy<=31)
+
 The period to be considered as test where the peaks will be found (i.e. doy>=32)
 
 The area to be considered: The table voronoi (given by the user) contains the set of towers which are "interesting" for the application and is used only as filter on the data in order to take the CDR in a specific area. To run the experiments on all the data simply remove that "WHERE conditions".
