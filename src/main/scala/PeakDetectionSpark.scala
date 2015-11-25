@@ -24,7 +24,7 @@ case class Settings(
     val testSince: DateTime,
     val testUntil: Option[DateTime],
     val voronoiPath: String,
-    val threshold: Double
+    val binSize: Double
 )
 object Settings {
   private def parseDate = s => Call.dateFormat.parseDateTime(s)
@@ -53,16 +53,20 @@ class PeakDetection extends Serializable{
                s"<testSince (${Call.datePattern})> " +
                s"<testUntil (${Call.datePattern} or None)> " +
                "<voronoiPath> " +
-              "<threshold> ")
+              "<binSize> ")
 
-  def configure(args: Array[String]): Try[(Settings, SparkContext)] = {
+  def configure(args: Array[String]): Try[(Settings, SparkContext, RDD[String], Array[String])] = {
     Try {
       val props = Settings(args)
       val conf = new SparkConf()
         .setAppName(appName)
         .setMaster(props.master)
       val sc = new SparkContext(conf)
-      (props, sc)
+
+      val data = sc.textFile(props.cdrPath)
+      val voronoi = sc.textFile(props.voronoiPath).collect
+
+      (props, sc, data, voronoi)
     }
   }
 
@@ -71,28 +75,39 @@ class PeakDetection extends Serializable{
     Call(a).getOrElse(None)
   }
 
-  def calcDataRaws(data: RDD[String]) = {
+  def calcCalls(data: RDD[String]) = {
+    data.filter(_.length != 0).map(parse(_)).filter(_ != None)
+  }
+
+  def calcDataRaws(calls: RDD[_]) = {
     val zero = scala.collection.mutable.Set[String]()
-    data.filter(_.length != 0).map(parse(_)).filter(_ != None).map{
+    calls.map{
       case c@Call(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) =>
-        ((c.cellId1stCellCalling, c.dateTime), c.callingPartyNumberKey)
+        val dt = c.dateTime
+        ((c.cellId1stCellCalling.substring(0, 5),
+          dt.getHourOfDay,
+          dt.getDayOfWeek,
+          dt.getDayOfYear),
+        c.callingPartyNumberKey)
      }.aggregateByKey(zero)(
       (set, v) => set += v,
       (set1, set2) => set1 ++= set2
-    ).map{ case ((cellId, dt), set) =>
-      DataRaw(CDR(cellId, dt.getHourOfDay, dt.getDayOfWeek, dt.getDayOfYear),
-              set.size)
+    ).map{ case ((cellId, hour, dow, doy), set) =>
+      DataRaw(CDR(cellId, hour, dow, doy), set.size)
     }
   }
 
-  def calcCpBase(dataRaw: RDD[DataRaw], voronoi: Array[String],
-                 since: DateTime, until: DateTime) = {
-    dataRaw
-      .filter{ case DataRaw(id, _ ,_ , doy, _) =>
+  def calcTrainingData(dataRaw: RDD[DataRaw], voronoi: Array[String],
+                       since: DateTime, until: DateTime) = {
+    dataRaw.filter{ case DataRaw(id, _ ,_ , doy, _) =>
         voronoi.contains(id) &&
         doy >= since.getDayOfYear &&
         doy <= until.getDayOfYear
-      }.map{
+    }
+  }
+
+  def calcCpBase(trainingData: RDD[DataRaw]) = {
+    trainingData.map{
         case DataRaw(id, hour, dow, doy, num) =>
           ((id, hour, dow), (1, num))
       }.aggregateByKey((0, 0))(
@@ -102,8 +117,14 @@ class PeakDetection extends Serializable{
         .map{ case ((id, hour, dow), avg) => CpBase(id, hour, dow, avg) }
   }
 
-  def calcCpAnalyze(dataRaw: RDD[DataRaw], voronoi: Array[String]) =
-    dataRaw.filter( dr => voronoi.contains(dr.id) )
+  def calcCpAnalyze(dataRaw: RDD[DataRaw], voronoi: Array[String],
+                    since: DateTime, until: Option[DateTime]) = {
+    val cpAnalyze = dataRaw.filter( dr => voronoi.contains(dr.id) &&
+      dr.doy >= since.getDayOfYear)
+    if (until.isDefined)
+      cpAnalyze.filter( dr => dr.doy <= until.get.getDayOfYear)
+    cpAnalyze
+  }
 
   def calcEvents(cpBase: RDD[CpBase], cpAnalyze: RDD[DataRaw]) = {
     val am = cpAnalyze.map( dr => ((dr.dow, dr.doy), dr.num) )
@@ -131,28 +152,33 @@ class PeakDetection extends Serializable{
     }
   }
 
-  def calcEventsFilter(events: RDD[Event]) = {
+  def calcEventsFilter(events: RDD[Event], binSize: Double) = {
     events.filter{case Event(_, ratio, aNum, bNum) =>
       Math.abs(ratio) >= 0.2 && Math.abs(aNum - bNum) >= 50 && ratio > 0
     }.map{ case Event(k, ratio, _, _) =>
-      (k, Math.floor(Math.abs(ratio / 0.1)) * 0.1 * Math.signum(ratio))
+      (k, Math.floor(Math.abs(ratio / binSize)) * binSize * Math.signum(ratio))
     }
   }
 
-  def run(props: Settings, sc: SparkContext) = {
-    val data = sc.textFile(props.cdrPath)
-    val voronoi = sc.textFile(props.voronoiPath).collect
+  def run(props: Settings, sc: SparkContext, data: RDD[String],
+          voronoi: Array[String]) = {
+    val calls = calcCalls(data)
+    calls.persist(StorageLevel.MEMORY_ONLY_SER)
+    calls.saveAsTextFile(props.output + "/calls")
 
-    val dataRaw = calcDataRaws(data)
+    val dataRaw = calcDataRaws(calls)
     dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
     dataRaw.saveAsTextFile(props.output + "/dataRaw")
 
-    /*
-    val cpBase = calcCpBase(dataRaw, voronoi, props.trainingSince, props.trainingUntil)
+    val trainingData = calcTrainingData(dataRaw, voronoi, props.trainingSince, props.trainingUntil)
+    trainingData.persist(StorageLevel.MEMORY_ONLY_SER)
+    trainingData.saveAsTextFile(props.output + "/trainingData")
+
+    val cpBase = calcCpBase(trainingData)
     cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
     cpBase.saveAsTextFile(props.output + "/cpBase")
 
-    val cpAnalyze = calcCpAnalyze(dataRaw, voronoi)
+    val cpAnalyze = calcCpAnalyze(dataRaw, voronoi, props.testSince, props.testUntil)
     cpAnalyze.persist(StorageLevel.MEMORY_ONLY_SER)
     cpAnalyze.saveAsTextFile(props.output + "/cpAnalyze")
 
@@ -161,19 +187,18 @@ class PeakDetection extends Serializable{
     events.saveAsTextFile(props.output + "/events")
     println(s"Found ${events.count} events.")
 
-    val eventsFilter = calcEventsFilter(events)
+    val eventsFilter = calcEventsFilter(events, props.binSize)
     eventsFilter.saveAsTextFile(props.output + "/eventsFilter")
     println(s"Found ${eventsFilter.count} events after filtering.")
     eventsFilter.collect
-    */
   }
 }
 
 object PeakDetectionSpark extends PeakDetection {
   def main(args: Array[String]) {
     configure(args) match {
-      case Success((props: Settings, sc: SparkContext)) =>
-        run(props, sc)
+      case Success((props, sc, data, voronoi)) =>
+        run(props, sc, data, voronoi)
       case Failure(e) =>
         System.err.println(this.usage)
         System.exit(1)
