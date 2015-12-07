@@ -2,7 +2,7 @@
 #SPARK_HOME=
 JARS=`ls -dm ./lib/*.jar | tr -d ' '`
 SUBMIT=$SPARK_HOME'/bin/spark-submit'
-TARGET=./target/scala-2.10/peakdetection_2.10-1.1.jar
+TARGET=./target/scala-2.10/telecomanalytics_2.10-1.1.jar
 CLASS=$1
 SMASTER=$2
 #PROPERTIES=$SPARK_HOME'/conf/spark-defaults.conf'

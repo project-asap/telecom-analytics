@@ -1,4 +1,4 @@
-package pd
+package ta
 
 import scala.util.Try
 
@@ -73,6 +73,14 @@ case class DataRaw(
 object DataRaw {
   def apply(c: CDR, num: Int): DataRaw =
     new DataRaw(c.id, c.hour, c.dow, c.doy, num)
+
+  def apply(str: String) = {
+    val pattern = """^DataRaw\((\S*),(\d*),(\d*),(\d*),(\d*)\)""".r
+    str match {
+      case pattern(id, hour, dow, doy, num) =>
+        new DataRaw(id, hour.toInt, dow.toInt, doy.toInt, num.toInt)
+    }
+  }
 }
 
 case class CpBase(
@@ -81,6 +89,15 @@ case class CpBase(
   val dow: Int,
   val num: Int
 )
+object CpBase {
+  def apply(str: String) = {
+    val pattern = """^CpBase\((\S*),(\d*),(\d*),(\d*)\)""".r
+    str match {
+      case pattern(id, hour, dow, num) =>
+        new CpBase(id, hour.toInt, dow.toInt, num.toInt)
+    }
+  }
+}
 
 case class Key(
   val id: String,
