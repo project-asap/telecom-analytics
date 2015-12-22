@@ -8,6 +8,8 @@ import com.typesafe.config.{Config, ConfigValueFactory}
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
+import org.apache.spark.broadcast.Broadcast
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -20,7 +22,7 @@ class DataFilter extends Serializable{
   val usage = s"Usage: submit.sh ${appName} ${DataFilterSettings.toString}"
 
   def configure(args: Array[String]): Try[(DataFilterSettings, SparkContext, RDD[String],
-    Array[String])] = {
+    Broadcast[Set[String]])] = {
     Try {
       val props = DataFilterSettings(args)
       val conf = new SparkConf()
@@ -29,13 +31,13 @@ class DataFilter extends Serializable{
       val sc = new SparkContext(conf)
 
       val data = sc.textFile(props.cdrPath)
-      val voronoi = sc.textFile(props.voronoiPath).collect
+      val voronoi = sc.broadcast(sc.textFile(props.voronoiPath).map(_.trim).collect.toSet)
 
       (props, sc, data, voronoi)
     }
   }
 
-  def parse(l: String, delim: String = ";") = {
+  def parse(l: String, delim: String = " ; ") = {
     val a = l.split(delim, -1).map(_.trim)
     Call(a).getOrElse(None)
   }
@@ -47,7 +49,7 @@ class DataFilter extends Serializable{
   def calcDataRaws(calls: RDD[_]) = {
     val zero = scala.collection.mutable.Set[String]()
     calls.map{
-      case c@Call(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) =>
+      case c@Call(_,_,_,_,_) =>
         val dt = c.dateTime
         ((c.cellId1stCellCalling.substring(0, 5),
           dt.getHourOfDay,
@@ -62,19 +64,19 @@ class DataFilter extends Serializable{
     }
   }
 
-  def calcTrainingData(dataRaw: RDD[DataRaw], voronoi: Array[String],
+  def calcTrainingData(dataRaw: RDD[DataRaw], voronoi: Broadcast[Set[String]],
                        since: DateTime, until: DateTime) = {
     dataRaw.filter{ case DataRaw(id, _ ,_ , doy, _) =>
-      voronoi.contains(id) &&
+      voronoi.value.contains(id) &&
       doy >= since.getDayOfYear &&
       doy <= until.getDayOfYear
     }
   }
 
-  def calcTestData(dataRaw: RDD[DataRaw], voronoi: Array[String],
+  def calcTestData(dataRaw: RDD[DataRaw], voronoi: Broadcast[Set[String]],
                        since: DateTime, until: Option[DateTime]) = {
     val tmp = dataRaw.filter{ case DataRaw(id, _ ,_ , doy, _) =>
-      voronoi.contains(id) && doy >= since.getDayOfYear
+      voronoi.value.contains(id) && doy >= since.getDayOfYear
     }
     if (until.isDefined)
       tmp.filter{ case DataRaw(_, _ ,_ , doy, _) =>
@@ -84,7 +86,7 @@ class DataFilter extends Serializable{
   }
 
   def run(props: DataFilterSettings, sc: SparkContext, data: RDD[String],
-          voronoi: Array[String]) = {
+          voronoi: Broadcast[Set[String]]) = {
     val calls = calcCalls(data)
     calls.persist(StorageLevel.MEMORY_ONLY_SER)
     calls.saveAsTextFile(props.output + "/calls")

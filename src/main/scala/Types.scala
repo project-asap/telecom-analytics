@@ -6,27 +6,11 @@ import org.joda.time.{DateTime, DateTimeConstants}
 import org.joda.time.format.DateTimeFormat
 
 case class Call(
-  val cdrType: String,
   val callingPartyNumberKey: String,
-  val callingSubscriberImsi: String,
   val dateTime: DateTime,
   val chargeableDuration: String,
-  val exchangeIdentity: String,
-  val outgoingRoute: String,
-  val incomingRoute: String,
   val cellId1stCellCalling: String,
-  val gsmTeleServiceCode: String,
-  val cellIdLastCellCalling: String,
-  val disconnectingParty: String,
-  val callingSubscriberImei: String,
-  val tac: String,
-  val residentCustomerFlag: String,
-  val paymentType: String,
-  val contractStatus: String,
-  val contractStartingDate: String,
-  val country: String,
-  val cityPostalCode: String,
-  val city: String
+  val cellIdLastCellCalling: String
 ){
   val isWeekday = dateTime.getDayOfWeek < DateTimeConstants.SATURDAY
   def timeSlot(duration: Int) = dateTime.getHourOfDay / duration
@@ -34,7 +18,7 @@ case class Call(
 }
 
 object Call {
-  val datePattern = "yyyyMMdd"
+  val datePattern = "yyyy-MM-dd"
   val timePattern = "HHmmss"
   val datetimeDelim = ":"
   val datetimePattern = Array(datePattern, timePattern).mkString(datetimeDelim)
@@ -48,9 +32,7 @@ object Call {
     val dt = datetimeFormat.parseDateTime(dateTime)
 
     new Call(
-      a(0), a(1), a(2), dt, a(5), a(6), a(7), a(8), a(9), a(10),
-      a(11), a(12), a(13), a(14), a(15), a(16), a(17), a(18), a(19),
-      a(20), a(21)
+      a(0), dt, a(5), a(9), a(10)
     )
    }
   }

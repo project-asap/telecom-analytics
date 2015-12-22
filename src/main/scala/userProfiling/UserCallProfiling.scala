@@ -12,7 +12,7 @@ import org.joda.time.{DateTime, DateTimeConstants}
 import org.joda.time.format.DateTimeFormat
 
 object UserCallProfiling {
-  def parseCall(l: String, delim: String = ";")  = {
+  def parseCall(l: String, delim: String = " ; ")  = {
     val a = l.split(delim, -1).map(_.trim)
     Call(a).getOrElse(None)
   }
@@ -34,10 +34,11 @@ object UserCallProfiling {
     }.collect
 
     val stc = data.filter(_.length != 0).map(parseCall(_)).map{
-      case c@Call(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) =>
+      case c@Call(_,_,_,_,_) =>
         SpaceTimeCall(
-          c.callingSubscriberImsi,
-          c.city,
+          c.callingPartyNumberKey,
+          //c.city,
+          "ROMA",
           c.dateTime.getWeekOfWeekyear,
           c.isWeekday,
           c.timeSlot,
