@@ -61,7 +61,7 @@ class PeakDetection extends Serializable{
 
     val eventsFilter = calcEventsFilter(events, binSize)
     eventsFilter.persist(StorageLevel.MEMORY_ONLY_SER)
-    events.saveAsTextFile(s"${output}/eventsFilter")
+    eventsFilter.saveAsTextFile(s"${output}/eventsFilter")
     eventsFilter
   }
 }

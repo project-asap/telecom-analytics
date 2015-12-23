@@ -46,6 +46,36 @@ class DataFilter extends Serializable{
     data.filter(_.length != 0).map(parse(_)).filter(_ != None)
   }
 
+  def calcTrainingCalls(calls: RDD[_], voronoi: Broadcast[Set[String]],
+                    since: DateTime, until: DateTime) = {
+    calls.filter{
+      case c@Call(_,_,_,_,_) =>
+        val doy = c.dateTime.getDayOfYear
+        val id = c.cellId1stCellCalling.substring(0, 5)
+        (voronoi.value.contains(id) &&
+         doy >= since.getDayOfYear &&
+         doy <= until.getDayOfYear)
+    }
+  }
+
+  def calcTestCalls(calls: RDD[_], voronoi: Broadcast[Set[String]],
+                    since: DateTime, until: Option[DateTime]) = {
+    val tmp = calls.filter{
+      case c@Call(_,_,_,_,_) =>
+        val doy = c.dateTime.getDayOfYear
+        val id = c.cellId1stCellCalling.substring(0, 5)
+        voronoi.value.contains(id) && doy >= since.getDayOfYear
+    }
+    if (until.isDefined) {
+      tmp.filter{
+        case c@Call(_,_,_,_,_) =>
+          val doy = c.dateTime.getDayOfYear
+          doy <= until.get.getDayOfYear
+      }
+    }
+    tmp
+  }
+
   def calcDataRaws(calls: RDD[_]) = {
     val zero = scala.collection.mutable.Set[String]()
     calls.map{
@@ -64,43 +94,18 @@ class DataFilter extends Serializable{
     }
   }
 
-  def calcTrainingData(dataRaw: RDD[DataRaw], voronoi: Broadcast[Set[String]],
-                       since: DateTime, until: DateTime) = {
-    dataRaw.filter{ case DataRaw(id, _ ,_ , doy, _) =>
-      voronoi.value.contains(id) &&
-      doy >= since.getDayOfYear &&
-      doy <= until.getDayOfYear
-    }
-  }
-
-  def calcTestData(dataRaw: RDD[DataRaw], voronoi: Broadcast[Set[String]],
-                       since: DateTime, until: Option[DateTime]) = {
-    val tmp = dataRaw.filter{ case DataRaw(id, _ ,_ , doy, _) =>
-      voronoi.value.contains(id) && doy >= since.getDayOfYear
-    }
-    if (until.isDefined)
-      tmp.filter{ case DataRaw(_, _ ,_ , doy, _) =>
-        doy <= until.get.getDayOfYear
-    }
-    tmp
-  }
-
   def run(props: DataFilterSettings, sc: SparkContext, data: RDD[String],
           voronoi: Broadcast[Set[String]]) = {
-    val calls = calcCalls(data)
-    calls.persist(StorageLevel.MEMORY_ONLY_SER)
-    calls.saveAsTextFile(props.output + "/calls")
+    val calls = calcCalls(data).cache
 
-    val dataRaw = calcDataRaws(calls)
-    dataRaw.persist(StorageLevel.MEMORY_ONLY_SER)
-    dataRaw.saveAsTextFile(props.output + "/dataRaw")
+    val trainingCalls = calcTrainingCalls(calls, voronoi, props.trainingSince, props.trainingUntil)
 
-    val trainingData = calcTrainingData(dataRaw, voronoi, props.trainingSince, props.trainingUntil)
-    trainingData.persist(StorageLevel.MEMORY_ONLY_SER)
+    val testCalls = calcTestCalls(calls, voronoi, props.testSince, props.testUntil)
+
+    val trainingData = calcDataRaws(trainingCalls)
     trainingData.saveAsTextFile(props.output + "/trainingData")
 
-    val testData = calcTestData(dataRaw, voronoi, props.testSince, props.testUntil)
-    testData.persist(StorageLevel.MEMORY_ONLY_SER)
+    val testData = calcDataRaws(testCalls)
     testData.saveAsTextFile(props.output + "/testData")
     trainingData.collect
   }
