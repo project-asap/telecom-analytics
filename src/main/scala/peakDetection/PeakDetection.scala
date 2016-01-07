@@ -33,7 +33,7 @@ class PeakDetection extends Serializable{
     val cpAnalyzeJoinAm = cpAnalyze.map(dr => (dr.doy, dr))
       .join(am.map{ case (dow, doy, num) => (doy, num) })
       .map{ case (doy, (dr, sum)) =>
-      (Key(dr.id, dr.hour, dr.dow), (dr.num.toDouble/sum, dr.num))}
+      (Key(dr.id, dr.hour, dr.dow), (doy, dr.num.toDouble/sum, dr.num))}
 
     val cpBaseJoinBm = cpBase.map(cp =>
       (cp.dow, cp)
@@ -41,16 +41,16 @@ class PeakDetection extends Serializable{
       (Key(cp.id, cp.hour, cp.dow), (cp.num.toDouble/sum, cp.num))}
 
     cpAnalyzeJoinAm.join(cpBaseJoinBm).map {
-      case (k, ((amNum, aNum), (bmNum, bNum))) =>
-        Event(k, amNum/bmNum - 1, aNum, bNum)
+      case (k, ((doy, amNum, aNum), (bmNum, bNum))) =>
+        Event(k.id, k.hour, doy, k.dow, amNum/bmNum - 1, aNum, bNum)
     }
   }
 
   def calcEventsFilter(events: RDD[Event], binSize: Double) = {
-    events.filter{case Event(_, ratio, aNum, bNum) =>
-      Math.abs(ratio) >= 0.2 && Math.abs(aNum - bNum) >= 50 && ratio > 0
-    }.map{ case Event(k, ratio, _, _) =>
-      (k, Math.floor(Math.abs(ratio / binSize)) * binSize * Math.signum(ratio))
+    events.filter{case e@Event(_,_,_,_,_,_,_) =>
+      Math.abs(e.ratio) >= 0.2 && Math.abs(e.aNum - e.bNum) >= 50 && e.ratio > 0
+    }.map{ case e@ Event(_,_,_,_,_,_,_) =>
+      (e.id, e.hour, e.doy, e.dow, Math.floor(Math.abs(e.ratio / binSize)) * binSize * Math.signum(e.ratio))
     }
   }
 

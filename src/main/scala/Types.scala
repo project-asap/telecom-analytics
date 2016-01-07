@@ -88,7 +88,10 @@ case class Key(
 )
 
 case class Event(
-  val k: Key,
+  val id: String,
+  val hour: Int,
+  val doy: Int,
+  val dow: Int,
   val ratio: Double,
   val aNum: Double,
   val bNum: Double
