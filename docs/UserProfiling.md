@@ -3,15 +3,15 @@ User Profiling
 
 The user is profiled starting from the CDR building a matrix representing the its call behaviour. 
 
-![Image](/docs/UserProfilingCentralized1.png)
+![Image](/docs/UserProfiling1.png)
 
 Each user is profiled in each area (i.e. covered by several towers). For example in different area of the city.
 
-![Image](/docs/UserProfilingCentralized2.png)
+![Image](/docs/UserProfiling2.png)
 
 The following query implement the process in SQL.
 
-![Image](/docs/UserProfilingCentralized3.png)
+![Image](/docs/UserProfiling3.png)
 
 Parameters: 
 Antenna_areas table (tower_id, area_id)
