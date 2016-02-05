@@ -19,21 +19,22 @@ For simplifying the execution [submit.sh] (../../../../submit.sh) can be used.
 
 **Usage**:
 
-./submit.sh ta.PeakDetection \<master\> \<cpBaseFile\> \<testDataFile\> \<binSize\>
+./submit.sh ta.PeakDetection \<master\> \<cpBaseIn\> \<testIn\> \<eventsOut\> \<eventsFilterOut\>\<binSize\>
 
 **Input parameters**:
-- the spark master URI
-- the cpBase dataset URI (HDFS or local)
-- the testData table URI (HDFS or local)
-- the ouput path
-- the bin size: the size of the events ratio bins (i.e. 10%)
+- **master**: the spark master URI
+- **cpBaseIn**: the input cpBase dataset URI (HDFS or local) (created during the [Distribution Computation] (../distributionComputation/README.md) step)
+- **testIn**: the input test dataset table URI (HDFS or local) (created during the [Data Filter] (../dataFilter/README.md) step)
+- **eventOut**: the output events dataset URI (an non existing HDFS or local directory)
+- **eventsFilterOut**: the output filtered events dataset URI (an non existing HDFS or local directory)
+- **binSize**: the bin size: the size of the events ratio bins (i.e. 10%)
 
 **Output**:
-Upon successful execution the \<output\>/events & \<output\>/eventsFilter datasets will be created.
+Upon successful execution the events eventsFilter datasets will be created under the locations specified by the user.
 
 e.g.:
 
-./submit.sh ta.PeakDetection spark://localhost:7077 /output/cpBase /output/testData /output 0.1
+./submit.sh ta.PeakDetection spark://localhost:7077 /output/cpBase /output/testData /output/events /output/eventsFilter 0.1
 
 ## SQL formalization:
 

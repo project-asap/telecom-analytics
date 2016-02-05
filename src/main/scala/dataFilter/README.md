@@ -31,22 +31,23 @@ The second dataset will be then compared against such typical period in order to
 As an spark application, this operator can be executed by being submitted in an running spark installation.
 For simplifying the execution [submit.sh] (../../../../submit.sh) can be used.
 
-**Usage**: ./submit.sh ta.DataFilter \<master\> \<cdrPath\> \<output\> \<trainingSince (yyyy-MM-dd)\> \<trainingUntil (yyyy-MM-dd)\> \<testSince (yyyy-MM-dd)\> \<testUntil (yyyy-MM-dd or None)\> \<voronoiPath\>
+**Usage**: ./submit.sh ta.DataFilter \<master\> \<cdrIn\> \<voronoiIn\> \<trainingOut\> \<testOut\> \<trainingSince (yyyy-MM-dd)\> \<trainingUntil (yyyy-MM-dd)\> \<testSince (yyyy-MM-dd)\> \<testUntil (yyyy-MM-dd or None)\>
 
 **Input parameters**:
-- the spark master URI
-- the input CDR dataset (HDFS or local)
-- the ouput path (an non existing HDFS or local directory)
-- the start date for the training period (format yyyy-MM-dd)
-- the end date for the training period (format yyyy-MM-dd)
-- the start date for the test period (format yyyy-MM-dd)
-- the end date for the training period (format yyyy-MM-dd) or None
-- the path to the voronoi table: the set of towers ids in analysis.
+- **master**: the spark master URI
+- **cdrIn**: the input CDR dataset (HDFS or local)
+- **voronoiIn**: the input voronoi dataset (the set of towers ids in analysis)
+- **trainingOut**: the ouput training dataset (an non existing HDFS or local directory)
+- **testOut**: the ouput test dataset (an non existing HDFS or local directory)
+- **trainingSince**: the start date for the training period (format yyyy-MM-dd)
+- **trainingUntil**: the end date for the training period (format yyyy-MM-dd)
+- **testSince**: the start date for the test period (format yyyy-MM-dd)
+- **testUntil**: the end date for the training period (format yyyy-MM-dd) or None
 
 **Output**:
-Upon successful execution the \<output\>/trainingData & \<output\>/testData datasets will be created.
+Upon successful execution the training and test datasets will be created under the locations provided by the user.
 
-e.g.: ./submit.sh ta.DataFilter spark://localhost:7077 /dataset_simulated /output 2015-06-01 2015-06-02 2015-06-03 None /voronoi
+e.g.: ./submit.sh ta.DataFilter spark://localhost:7077 /dataset_simulated /output/trainingData /output/testData 2015-06-01 2015-06-02 2015-06-03 None /voronoi
 
 ## SQL formalization:
 

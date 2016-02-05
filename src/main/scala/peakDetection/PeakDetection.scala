@@ -16,9 +16,6 @@ import org.joda.time.DateTime
 import scala.util.Try
 
 class PeakDetection extends Serializable{
-  val appName = this.getClass().getSimpleName
-  val usage = s"Usage: submit.sh ${appName} <master> <cpBaseFile> <testDataFile> <binSize>"
-
   private def calcEvents(cpBaseStr: RDD[String], cpAnalyzeStr: RDD[String]) = {
     val cpBase = cpBaseStr.map(CpBase(_))
     val cpAnalyze = cpAnalyzeStr.map(DataRaw(_))
@@ -54,14 +51,15 @@ class PeakDetection extends Serializable{
     }
   }
 
-  def run(cpBase: RDD[String], testData: RDD[String], binSize: Double, output: String) = {
+  def run(cpBase: RDD[String], testData: RDD[String], binSize: Double,
+    eventsOut: String, eventsFilterOut: String) = {
     val events = calcEvents(cpBase, testData)
     events.persist(StorageLevel.MEMORY_ONLY_SER)
-    events.saveAsTextFile(s"${output}/events")
+    events.saveAsTextFile(eventsOut)
 
     val eventsFilter = calcEventsFilter(events, binSize)
     eventsFilter.persist(StorageLevel.MEMORY_ONLY_SER)
-    eventsFilter.saveAsTextFile(s"${output}/eventsFilter")
+    eventsFilter.saveAsTextFile(eventsFilterOut)
     eventsFilter
   }
 }
@@ -71,19 +69,19 @@ object PeakDetection extends PeakDetection {
       val appName = this.getClass().getSimpleName
 
       args.toList match {
-        case master :: cpBaseFile :: testDataFile :: output :: binSize :: Nil =>
+        case master :: cpBaseIn :: testIn :: eventsOut :: eventsFilterOut :: binSize :: Nil =>
           val conf = new SparkConf()
             .setAppName(appName)
             .setMaster(master)
           val sc = new SparkContext(conf)
 
-          val cpBase = sc.textFile(cpBaseFile)
-          val testData = sc.textFile(testDataFile)
+          val cpBase = sc.textFile(cpBaseIn)
+          val testData = sc.textFile(testIn)
 
-          val eventsFilter = run(cpBase, testData, binSize.toDouble, output)
+          val eventsFilter = run(cpBase, testData, binSize.toDouble, eventsOut, eventsFilterOut)
           println(s"Found ${eventsFilter.count} events after filtering.")
         case _ =>
-          val usage = (s"Usage: submit.sh ${appName} <master> <cpBaseFile> <testDataFile> <output> <binSize (Int)>")
+          val usage = (s"Usage: submit.sh ${appName} <master> <cpBaseIn> <testIn> <eventsOut> <binSize (Int)>")
           System.err.println(usage)
           System.exit(1)
     }

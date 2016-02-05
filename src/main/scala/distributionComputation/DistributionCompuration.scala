@@ -28,21 +28,20 @@ object DistributionComputation extends Serializable {
 
   def main(args: Array[String]) {
     val appName = this.getClass().getSimpleName
-    val usage = s"Usage: submit.sh ${appName} <master> <trainingDataFile> <output>"
+    val usage = s"Usage: submit.sh ${appName} <master> <trainingIn> <cpBaseOut>"
 
     args.toList match {
-      case master :: trainingDataFile :: output :: Nil =>
+      case master :: trainingIn :: cpBaseOut :: Nil =>
         val conf = new SparkConf()
           .setAppName(appName)
           .setMaster(master)
         val sc = new SparkContext(conf)
 
-        val trainingData = sc.textFile(trainingDataFile)
+        val trainingData = sc.textFile(trainingIn)
 
         val cpBase = calcCpBase(trainingData)
         cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
-        println(s"output: ${output}, count: ${cpBase.count}")
-        cpBase.saveAsTextFile(output + "/cpBase")
+        cpBase.saveAsTextFile(cpBaseOut)
       case _ => 
         System.err.println(usage)
         System.exit(1)

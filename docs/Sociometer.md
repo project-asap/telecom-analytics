@@ -1,54 +1,24 @@
-# Sociometer modules documentation –pyspark
+Sociometer
+==========
 
-The complete workflow involves the usage of the following modules (in the same order). 
+The user is profiled starting from the CDR building a matrix representing the its call behaviour.
 
-## User profiling
+![Image](/docs/Sociometer1.png)
 
-**Usage**: pyspark user_profilo.py \<folder\> \<spatial_division\> \<region\> \<timeframe\>
+Each user is profiled in each area (i.e. covered by several towers). For example in different area of the city.
 
-**e.g.**: pyspark user_profilo.py dataset centro_roma.csv roma 06-2015
+![Image](/docs/Sociometer2.png)
 
-Input parameter:
-- folder: the hdfs folder where the dataset is located. In order to let the profiles be computed, it needs at least 3 weeks of data. Dataset is assumed to be splitted into days (e.g. one day = one csv file).
-- spatial_division: A csv file containing the spatial region of each GSM tower. E.g. “***REMOVED***;city_center”.
-- region: a string containing the name of the region related to the dataset
-- timeframe: a string containing the period related to the dataset
+The complete workflow involves the usage of the following modules (in the same order):
 
-Output:
+- User Profiling
+- Clustering
+- User Annotation
 
-It stores the profiles (as Pickle file) into the folder /profiles\<region\>-\<timeframe\>.
+The overall calculation is illustrated here:
 
-Profiles are in the format: user_id->[(region,week n.,workday/weekend, timeframe,number of presence),….]
+![Image](/docs/Sociometer3.png)
 
-## Clustering 
+Pyspark implementation guidelines are available [here] (/src/python/sociometer/README.md).
 
-**Usage**: pyspark clustering.py \<region\> \<timeframe\> \<archetipi\> \<k\> \<percentage\>
-
-**e.g.**: pyspark clustering.py roma 06-2015 archetipi.csv 100 0.4
-
-Input parameter:
-- region: a string containing the name of the region related to the dataset
-- timeframe: a string containing the period related to the dataset
-- archetipi: a csv files containing typical calling profiles for each label. E.g.: Resident->typical resident profiles, etc..
-- k: the number of centroids to be computed
-- percentage: the percentage of profiles to use for centroids computation
-
-Output:
-
-It stores a files “centroids\<region\>-\<timeframe\>” containing the association between each centroid and the user type. E.g. Centroid1->resident, etc
-
-## User annotation
-
-**Usage**: pyspark user_annotation.py \<region\> \<timeframe\>
-
-**e.g.**: pyspark user_annotation.py roma 06-2015
-
-Input parameter:
-
-- region: a string containing the name of the region related to the dataset
-- timeframe: a string containing the period related to the dataset
-
-Output:
-It stores a file “sociometer\<region\>-\<timeframe\>” containing the percentage of user of each profile.
-E.g.  roma-center, Resident, 0.34
-
+Scala implementation guidelines are available [here] (/src/main/scala/userProfiling/README.md).

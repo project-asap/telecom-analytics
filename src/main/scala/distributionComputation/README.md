@@ -12,18 +12,18 @@ The result represents the standard behavior and it is saved in a new dataset nam
 As an spark application, this operator can be executed by being submitted in an running spark installation.
 For simplifying the execution [submit.sh] (../../../../submit.sh) can be used.
 
-**Usage**: ./submit.sh ta.DistributionComputation \<master\> \<trainingDataFile\> \<output\>
+**Usage**: ./submit.sh ta.DistributionComputation \<master\> \<trainingIn\> \<cpBaseOut\>
 
 
 **Input parameters**:
-- the spark master URI
-- the training dataset URI (HDFS or local) (created during the data filtering step)
-- the ouput path (an non existing HDFS or local directory)
+- **master**: the spark master URI
+- **trainingIn**: the training dataset URI (HDFS or local) (created during the [Data Filter] (../dataFilter/README.md) step)
+- **cpBaseOut**: the ouput cpBase dataset (an non existing HDFS or local directory)
 
 **Output**:
-Upon successful execution the \<output\>/cpBase dataset will be created.
+Upon successful execution the cpBase dataset will be created under the location specified by the user.
 
-e.g.: ./submit.sh ta.DistributionComputation spark://localhost:7077 /output/trainingData /output
+e.g.: ./submit.sh ta.DistributionComputation spark://localhost:7077 /output/trainingData /output/cpBase
 
 ## SQL formalization:
 

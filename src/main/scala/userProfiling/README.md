@@ -1,24 +1,25 @@
 User Profiling
 ==============
 
-The user is profiled starting from the CDR building a matrix representing the its call behaviour. 
+The user is profiled starting from the CDR building a matrix representing the its call behaviour.
 
-![Image](/docs/UserProfilingCentralized1.png)
+## Implementation Details
 
-Each user is profiled in each area (i.e. covered by several towers). For example in different area of the city.
+Usage:
 
-![Image](/docs/UserProfilingCentralized2.png)
+./submit.sh ta.UserCallProfiling \<master\> \<cdrIn\> \<geoIn\> \<profilingOut\> \<eventsFilterOut\>\<baseSince\> \<baseUntil\>
 
-The following query implement the process in SQL.
 
-![Image](/docs/UserProfilingCentralized3.png)
+**Input parameters**:
+- **master**: the spark master URI
+- **cpBaseIn**: the input cdr dataset URI (HDFS or local)
+- **geoIn**: the input geographical dataset URI (HDFS or local)
+- **profilingOut**: the output profiles dataset URI (an non existing HDFS or local directory)
+- **baseSince**: the start date for the period under analysis (format yyyy-MM-dd)
+- **baseUntil**: the end date for the period under analysis (format yyyy-MM-dd) or None
 
-Parameters: 
-Antenna_areas table (tower_id, area_id)
-The time partitioning (i.e 0-8, 8-19, 19-24)
-The period (i.e. week>=8 and week<=12)
 
-User Profiling
+## SQL formalization:
 
     create table user_profiles as
     select user_id, area_id, week, weekday, time_slot, count(distinct(week,weekday,_day)) as count

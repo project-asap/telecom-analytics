@@ -23,7 +23,7 @@ object UserCallProfiling {
   }
 
   def run(data: RDD[String], geoData: RDD[String], since: DateTime,
-          until: DateTime, outputLocation: String) {
+          until: DateTime, profilingOut: String) {
     val antenne = geoData.map(parseAntenna(_)).map{
       case a@Antenna(_,_,_,_,_,_,_) => a
       case _ => None
@@ -63,13 +63,13 @@ object UserCallProfiling {
       (set1, set2) => set1 ++= set2
     ).map{ case (k, s) => (k, s.size) }
       .sortBy{ case (k, num) => (k._1, k._3, k._4, k._5)}
-    profiling.saveAsTextFile(outputLocation + "/profiling")
+    profiling.saveAsTextFile(profilingOut)
   }
 
   def main(args: Array[String]) {
     val appName = this.getClass().getSimpleName
-    val usage = (s"Usage: submit.sh ${appName} <master> <cdrLocation> " +
-                 "<geoLocation> <outputLocation> " +
+    val usage = (s"Usage: submit.sh ${appName} <master> <cdrIn> " +
+                 "<geoIn> <profilingOut> " +
                  s"<baseSince (${Call.datePattern})> " +
                  s"<baseUntil (${Call.datePattern})>")
 
@@ -79,9 +79,9 @@ object UserCallProfiling {
     }
 
     val master = args(0)
-    val cdrLocation = args(1)
-    val geoLocation = args(2)
-    val outputLocation=args(3)
+    val cdrIn = args(1)
+    val geoIn = args(2)
+    val profilingOut=args(3)
     val baseSince = Call.dateFormat.parseDateTime(args(4))
     val baseUntil = Call.dateFormat.parseDateTime(args(5))
 
@@ -90,9 +90,9 @@ object UserCallProfiling {
       .setMaster(master)
     val sc = new SparkContext(conf)
 
-    val data = sc.textFile(cdrLocation)
-    val geoData = sc.textFile(geoLocation)
+    val data = sc.textFile(cdrIn)
+    val geoData = sc.textFile(geoIn)
 
-    run(data, geoData, baseSince, baseUntil, outputLocation)
+    run(data, geoData, baseSince, baseUntil, profilingOut)
   }
 }

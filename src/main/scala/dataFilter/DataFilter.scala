@@ -30,8 +30,8 @@ class DataFilter extends Serializable{
         .setMaster(props.master)
       val sc = new SparkContext(conf)
 
-      val data = sc.textFile(props.cdrPath)
-      val voronoi = sc.broadcast(sc.textFile(props.voronoiPath).map(_.trim).collect.toSet)
+      val data = sc.textFile(props.cdrIn)
+      val voronoi = sc.broadcast(sc.textFile(props.voronoiIn).map(_.trim).collect.toSet)
 
       (props, sc, data, voronoi)
     }
@@ -103,10 +103,10 @@ class DataFilter extends Serializable{
     val testCalls = calcTestCalls(calls, voronoi, props.testSince, props.testUntil)
 
     val trainingData = calcDataRaws(trainingCalls)
-    trainingData.saveAsTextFile(props.output + "/trainingData")
+    trainingData.saveAsTextFile(props.trainingOut)
 
     val testData = calcDataRaws(testCalls)
-    testData.saveAsTextFile(props.output + "/testData")
+    testData.saveAsTextFile(props.testOut)
     trainingData.collect
   }
 }
