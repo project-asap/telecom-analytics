@@ -9,8 +9,9 @@ import numpy as np
 
 
 import os,sys
-region=sys.argv[1]
-timeframe=sys.argv[2]
+profiles_in=sys.argv[1]
+centroids_in=sys.argv[2]
+sociometer_out=sys.argv[3]
 
 def euclidean(v1,v2):
 
@@ -41,13 +42,13 @@ sc=SparkContext()
 ##annotazione utenti
 
 ##open
-r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids%s-%s'%(region,timeframe))
+r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/%s' % centroids_in)
 cntr=r.collect()
 
 profiles=[(x[0],x[1]) for x in cntr]
 
 
-r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/'+"%s-%s"%(region,timeframe))
+r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/%s' % profiles_in)
 
 r_auto= r.flatMap(lambda x:  annota_utente(x[1],profiles)) \
    .map(lambda x: ((x[0],x[1]),1)) \
@@ -58,7 +59,8 @@ r_auto= r.flatMap(lambda x:  annota_utente(x[1],profiles)) \
 #
 lst=r_auto.collect()
 sociometer=[(x[0],x[1]*1.0/sum([y[1] for y in lst if y[0][0]==x[0][0]])) for x in lst]
-outfile=open('sociometer-%s-%s'%(region,timeframe),'w')
+suffix = profiles_in.split("/")[-1]
+outfile=open("/".join(sociometer_out, suffix), 'w')
 print >>outfile,"municipio, profilo, percentage"
 for s in sorted(sociometer,key=lambda x: x[0][0]):
 	print>>outfile, s[0][0],s[0][1].replace("\n",""),s[1]

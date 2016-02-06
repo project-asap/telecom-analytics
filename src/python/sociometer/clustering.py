@@ -35,10 +35,10 @@ def array_carretto(profilo):
         week_ordering = f7([x[1] for x in profilo if x[0] == munic])
         obs = [x[1:] for x in profilo if x[0] == munic]
         obs = sorted(obs, key=lambda d: sum([j[3] for j in obs if j[0] == d[0]]), reverse=True)
-      
+
         week_ordering = f7([x[0] for x in obs])
-        
-        
+
+
         carr = [0 for x in range(18)]
 
         for o in obs:
@@ -62,6 +62,8 @@ archetipi=sys.argv[3]
 k=sys.argv[4]
 
 perc=sys.argv[5]
+centroids_out=sys.argv[6]
+
 file=open(archetipi)
 archetipi = [(y[1], y[2:][:18]) for y in [x.split(';') for x in file.readlines()]]
 
@@ -91,7 +93,7 @@ for ctr in centroidi:
     tipo_centroide = \
         sorted([(c[0], euclidean(ctr, map(float, c[1]))) for  c in archetipi], key=lambda x: x[1])[0][0]
     tipi_centroidi.append((tipo_centroide, ctr))
-os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/centroids%s-%s"%(region,time))
-sc.parallelize(tipi_centroidi).saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids%s-%s'%(region,time))
 
-
+output = "%s/%s-%s" % (centroids_out, region, time)
+os.system("$HADOOP_HOME/bin/hadoop fs -rm -r %s" % output)
+sc.parallelize(tipi_centroidi).saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/%s' % output)

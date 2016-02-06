@@ -8,7 +8,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 import hdfs
 import time
-import os,sys 
+import os,sys
 ########################functions##################################
 
 def euclidean(v1,v2):
@@ -84,6 +84,7 @@ folder=sys.argv[1]
 spatial_division=sys.argv[2]
 region=sys.argv[3]
 timeframe=sys.argv[4]
+profiles_out=sys.argv[5]
 
 
 
@@ -117,7 +118,7 @@ if len(files)%7!=0:
 for i in range(0,len(files),7):
     print "week n.",i
     loc_file=files[i:i+7]
-    
+
 ###Processo:
  ##count giorni distinti di chiamata per ogni timeslot
 ## rimuovo day of week -> indicatore se ha telefonato o no in quel giorno in quello slot
@@ -131,12 +132,12 @@ for i in range(0,len(files),7):
       .reduceByKey(lambda x,y:x+y) \
       .map(lambda x: (x[0][0],[x[0][1:]+(x[1],),])) \
       .reduceByKey(lambda x,y:x+y) \
-      .persist( StorageLevel(False, True, False, False)) 
-    
+      .persist( StorageLevel(False, True, False, False))
+
     rddlist.append(lines)
 for r in range(len(rddlist)-1):
     rddlist[r+1]=rddlist[r].union(rddlist[r+1])
-    
+
 ###
 ### Carrello format: user -> [(municipio, settimana, weekend/workday, time_slice, count),...]
 ### nota: count= day of presence in the region at the timeslice
@@ -146,15 +147,16 @@ r=rddlist[-1].reduceByKey(lambda x,y:x+y)
 
 
 ##week ordering
-##keys: region,busiest week,workday/we,timeslice 
+##keys: region,busiest week,workday/we,timeslice
 r=r.map(lambda x: (x[0],sorted(x[1],key=lambda w: (w[0],sum([z[4] for z in x[1] if z[1]==w[1]]) , -w[2],w[3]),reverse=True)))
 
-r=r.map(lambda x: (x[0],normalize(x[1]))) 
+r=r.map(lambda x: (x[0],normalize(x[1])))
 
 #normalizzazione
 
 
 
 
-os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/%s-%s" %(region,timeframe))
-r.saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/'+"%s-%s"%(region,timeframe))
+output = "%s/%s-%s" % (profiles_out, region, timeframe)
+os.system("$HADOOP_HOME/bin/hadoop fs -rm -r %s" % output)
+r.saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/%s' % output)
