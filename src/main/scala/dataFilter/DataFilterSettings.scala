@@ -32,10 +32,9 @@ object DataFilterSettings {
     )
   }
 
-  override def toString = "<master> <cdrIn> <trainingOut> <testOut>" +
+  override def toString = "<master> <cdrIn> <voronoiIn> <trainingOut> <testOut> " +
   s"<trainingSince (${Call.datePattern})> " +
   s"<trainingUntil (${Call.datePattern})> " +
   s"<testSince (${Call.datePattern})> " +
-  s"<testUntil (${Call.datePattern} or None)> " +
-  "<voronoiPath>"
+  s"<testUntil (${Call.datePattern} or None)> "
 }

@@ -15,15 +15,24 @@ import org.joda.time.DateTime
 
 import scala.util.Try
 
+
 object DistributionComputation extends Serializable {
-  private def calcCpBase(trainingData: RDD[String]) = {
-    trainingData.map(DataRaw(_)).map(dr =>
+  private def calcCpBase(trainingData: RDD[DataRaw]) = {
+    trainingData.map(dr =>
           ((dr.id, dr.hour, dr.dow), (1, dr.num))
       ).aggregateByKey((0, 0))(
         (a, b) => (a._1 + b._1, a._2 + b._2),
         (a, b) => (a._1 + b._1, a._2 + b._2)
       ).mapValues(x => x._2/x._1)
         .map{ case ((id, hour, dow), avg) => CpBase(id, hour, dow, avg) }
+  }
+
+  def run(trainingData: RDD[DataRaw], cpBaseOut: String, save: Boolean = false) = {
+      val cpBase = calcCpBase(trainingData)
+      cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
+      if ( save ) cpBase.saveAsTextFile(cpBaseOut)
+
+      cpBase
   }
 
   def main(args: Array[String]) {
@@ -37,11 +46,9 @@ object DistributionComputation extends Serializable {
           .setMaster(master)
         val sc = new SparkContext(conf)
 
-        val trainingData = sc.textFile(trainingIn)
+        val trainingData = sc.textFile(trainingIn).map(DataRaw(_))
 
-        val cpBase = calcCpBase(trainingData)
-        cpBase.persist(StorageLevel.MEMORY_ONLY_SER)
-        cpBase.saveAsTextFile(cpBaseOut)
+        run(trainingData, cpBaseOut, save = true)
       case _ => 
         System.err.println(usage)
         System.exit(1)

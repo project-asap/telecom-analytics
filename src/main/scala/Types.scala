@@ -96,6 +96,15 @@ case class Event(
   val aNum: Double,
   val bNum: Double
 )
+object Event {
+  def apply(str: String) = {
+    val pattern = """^Event\((\S*),(\d*),(\d*),(\d*),(-?\d*.\d*E?-?\d?),(\d*.\d*),(\d*.\d*)\)""".r
+    str match {
+      case pattern(id, hour, doy, dow, ratio, aNum, bNum) =>
+        new Event(id, hour.toInt, doy.toInt, dow.toInt, ratio.toDouble, aNum.toDouble, bNum.toDouble)
+    }
+  }
+}
 
 case class SpaceTimeCall(
   val callingSubscriberImsi: String,

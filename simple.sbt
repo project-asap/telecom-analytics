@@ -13,3 +13,5 @@ libraryDependencies ++= Seq(
 )
 
 unmanagedJars in Compile := (baseDirectory.value ** "*.jar").classpath
+
+unmanagedSourceDirectories in Compile += baseDirectory.value / "examples/src"

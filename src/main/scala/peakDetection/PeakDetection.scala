@@ -16,10 +16,7 @@ import org.joda.time.DateTime
 import scala.util.Try
 
 class PeakDetection extends Serializable{
-  private def calcEvents(cpBaseStr: RDD[String], cpAnalyzeStr: RDD[String]) = {
-    val cpBase = cpBaseStr.map(CpBase(_))
-    val cpAnalyze = cpAnalyzeStr.map(DataRaw(_))
-
+  private def calcEvents(cpBase: RDD[CpBase], cpAnalyze: RDD[DataRaw]) = {
     val am = cpAnalyze.map( dr => ((dr.dow, dr.doy), dr.num) )
       .aggregateByKey(0)(_ + _, _ + _)
       .map { case ((dow, doy), sum) => (dow, doy, sum) }
@@ -45,22 +42,24 @@ class PeakDetection extends Serializable{
 
   def calcEventsFilter(events: RDD[Event], binSize: Double) = {
     events.filter{case e@Event(_,_,_,_,_,_,_) =>
-      Math.abs(e.ratio) >= 0.2 && Math.abs(e.aNum - e.bNum) >= 50 && e.ratio > 0
+//      Math.abs(e.ratio) >= 0.2 && Math.abs(e.aNum - e.bNum) >= 50 && e.ratio > 0
+      Math.abs(e.ratio) >= 0.2 && Math.abs(e.aNum - e.bNum) >= 30 && e.ratio > 0
     }.map{ case e@ Event(_,_,_,_,_,_,_) =>
       (e.id, e.hour, e.doy, e.dow, Math.floor(Math.abs(e.ratio / binSize)) * binSize * Math.signum(e.ratio))
     }
   }
 
-  def run(cpBase: RDD[String], testData: RDD[String], binSize: Double,
-    eventsOut: String, eventsFilterOut: String) = {
+  def run(cpBase: RDD[CpBase], testData: RDD[DataRaw], binSize: Double,
+    eventsOut: String, eventsFilterOut: String, save: Boolean = false) = {
     val events = calcEvents(cpBase, testData)
     events.persist(StorageLevel.MEMORY_ONLY_SER)
-    events.saveAsTextFile(eventsOut)
+    if ( save ) events.saveAsTextFile(eventsOut)
 
     val eventsFilter = calcEventsFilter(events, binSize)
     eventsFilter.persist(StorageLevel.MEMORY_ONLY_SER)
-    eventsFilter.saveAsTextFile(eventsFilterOut)
-    eventsFilter
+    if ( save ) eventsFilter.saveAsTextFile(eventsFilterOut)
+
+    (events, eventsFilter)
   }
 }
 
@@ -75,10 +74,10 @@ object PeakDetection extends PeakDetection {
             .setMaster(master)
           val sc = new SparkContext(conf)
 
-          val cpBase = sc.textFile(cpBaseIn)
-          val testData = sc.textFile(testIn)
+          val cpBase = sc.textFile(cpBaseIn).map(CpBase(_))
+          val testData = sc.textFile(testIn).map(DataRaw(_))
 
-          val eventsFilter = run(cpBase, testData, binSize.toDouble, eventsOut, eventsFilterOut)
+          val (events, eventsFilter) = run(cpBase, testData, binSize.toDouble, eventsOut, eventsFilterOut, save = true)
           println(s"Found ${eventsFilter.count} events after filtering.")
         case _ =>
           val usage = (s"Usage: submit.sh ${appName} <master> <cpBaseIn> <testIn> <eventsOut> <binSize (Int)>")

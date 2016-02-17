@@ -26,7 +26,7 @@ Profiles are in the format: user_id->[(region,week n.,workday/weekend, timeframe
 
 **Usage**: pyspark clustering.py \<profiles_in\> \<archetipi\> \<k\> \<percentage\> \<centroids_out\>
 
-**e.g.**: pyspark clustering.py /profiles/roma-06-2015 roma 06-2015 archetipi.csv 100 0.4 /centroids
+**e.g.**: pyspark clustering.py /profiles/roma-06-2015 archetipi.csv 100 0.4 /centroids
 
 Input parameters:
 
