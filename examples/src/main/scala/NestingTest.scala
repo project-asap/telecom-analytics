@@ -21,14 +21,14 @@ object NestingTest {
     val sc = new SparkContext(conf)
     val cdrIn = "/Users/butters/src/asap-project/telecom-analytics/src/test/resources/cdr-small.csv"
     //val cdrIn = "/Users/butters/src/asap-project/telecom-analytics/src/test/resources/cdr.csv"
-    val voronoiIn = "/Users/butters/src/asap-project/telecom-analytics/src/test/resources/voronoi"
+    val voronoiIn = "/Users/butters/src/asap-project/telecom-analytics/src/test/resources/centro_roma.csv"
 
     val cdrData = sc.textFile(cdrIn).filter(_.length != 0).map(parse(_)).filter{
       case Success(c) => true
       case Failure(_) => false
     }.map(_.get)
     cdrData.first  // hack
-    val voronoi = sc.textFile(voronoiIn).map(_.trim)
+    val voronoi = sc.textFile(voronoiIn).map(_.split(";", -1)(0).trim.substring(0, 5))
 
     val nst = cdrData.filter(c => {
         val id = c.cellId1stCellCalling.substring(0, 5)

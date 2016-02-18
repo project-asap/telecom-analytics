@@ -16,7 +16,7 @@ object PeakDetectionEx {
     val sc = new SparkContext(conf)
 
     val cdrIn = "src/test/resources/cdr-bigger.csv"
-    val voronoiIn = "src/test/resources/voronoi"
+    val voronoiIn = "src/test/resources/centro_roma.csv"
     val randomOut = Random.alphanumeric.take(10).mkString
     val trainingOut = s"src/test/resources/${randomOut}/trainingData"
     val testOut = s"src/test/resources/${randomOut}/testData"
@@ -29,7 +29,7 @@ object PeakDetectionEx {
         "2015-06-17", "2015-06-18", "None"))
 
     val cdrData = sc.textFile(cdrIn)
-    val voronoi = sc.textFile(voronoiIn).map(_.trim)
+    val voronoi = sc.textFile(voronoiIn).map(_.split(";", -1)(0).trim.substring(0, 5))
 
     val (trainingData, testData) = ta.DataFilter.run(props, sc, cdrData, voronoi)
 

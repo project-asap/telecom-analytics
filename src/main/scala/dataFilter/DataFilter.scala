@@ -31,8 +31,7 @@ class DataFilter extends Serializable{
       val sc = new SparkContext(conf)
 
       val data = sc.textFile(props.cdrIn)
-      //val voronoi = sc.broadcast(sc.textFile(props.voronoiIn).map(_.trim).collect.toSet)
-      val voronoi = sc.textFile(props.voronoiIn).map(_.trim)
+      val voronoi = sc.textFile(props.voronoiIn).map(_.split(";", -1)(0).trim.substring(0, 5))
 
       (props, sc, data, voronoi)
     }

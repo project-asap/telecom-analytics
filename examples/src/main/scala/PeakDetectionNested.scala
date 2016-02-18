@@ -20,7 +20,8 @@ object PeakDetectionNestedEx {
 
     val currentDir = new File(".").getCanonicalPath()
     val cdrIn = s"${currentDir}/src/test/resources/cdr-bigger.csv"
-    val voronoiIn = s"${currentDir}/src/test/resources/voronoi"
+    //val cdrIn = s"${currentDir}/src/test/resources/cdr-small.csv"
+    val voronoiIn = s"${currentDir}/src/test/resources/centro_roma.csv"
     val randomOut = Random.alphanumeric.take(10).mkString
     val trainingOut = s"${currentDir}/src/test/resources/${randomOut}/trainingData"
     val testOut = s"${currentDir}/src/test/resources/${randomOut}/testData"
@@ -32,8 +33,11 @@ object PeakDetectionNestedEx {
       Array("local", cdrIn, voronoiIn, trainingOut, testOut, "2015-06-10",
         "2015-06-17", "2015-06-18", "None"))
 
-    val cdrData = sc.textFile(cdrIn)
-    val voronoi = sc.textFile(voronoiIn)  // should be accessible by the workers
+    val cdrData = sc.textFile(cdrIn, 150)
+    //val cdrData = sc.textFile(cdrIn)
+
+    // should be absolute path to be accessible by the workers
+    val voronoi = sc.textFile(voronoiIn).map(_.split(";", -1)(0).trim.substring(0, 5))
 
     val (trainingData, testData) = ta.DataFilterNested.run(props, sc, cdrData, voronoi)
 
