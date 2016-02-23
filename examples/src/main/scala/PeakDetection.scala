@@ -15,14 +15,15 @@ object PeakDetectionEx {
       .setMaster(master)
     val sc = new SparkContext(conf)
 
-    val cdrIn = "src/test/resources/cdr-bigger.csv"
-    val voronoiIn = "src/test/resources/centro_roma.csv"
+    val currentDir = new java.io.File( "." ).getCanonicalPath
+    val cdrIn = s"file://${currentDir}/src/test/resources/cdr-bigger.csv"
+    val voronoiIn = s"file://${currentDir}/src/test/resources/centro_roma.csv"
     val randomOut = Random.alphanumeric.take(10).mkString
-    val trainingOut = s"src/test/resources/${randomOut}/trainingData"
-    val testOut = s"src/test/resources/${randomOut}/testData"
-    val cpBaseOut = s"src/test/resources/${randomOut}/cpBase"
-    val eventsOut = s"src/test/resources/${randomOut}/events"
-    val eventsFilterOut = s"src/test/resources/${randomOut}/eventsFilter"
+    val trainingOut = s"file://${currentDir}/src/test/resources/${randomOut}/trainingData"
+    val testOut = s"file://${currentDir}/src/test/resources/${randomOut}/testData"
+    val cpBaseOut = s"file://${currentDir}/src/test/resources/${randomOut}/cpBase"
+    val eventsOut = s"file://${currentDir}/src/test/resources/${randomOut}/events"
+    val eventsFilterOut = s"file://${currentDir}/src/test/resources/${randomOut}/eventsFilter"
 
     val props = ta.DataFilterSettings(
       Array("local", cdrIn, voronoiIn, trainingOut, testOut, "2015-06-10",

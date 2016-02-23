@@ -14,20 +14,20 @@ import ta._
 object PeakDetectionNestedEx {
   def main(args: Array[String]) {
     val master = Try{args(0)}.getOrElse("spark://localhost:7077")
-    val conf = new SparkConf().setAppName("PeakDetectionEx")
+    val conf = new SparkConf().setAppName("PeakDetectionNestedEx")
       .setMaster(master)
     val sc = new SparkContext(conf)
 
     val currentDir = new File(".").getCanonicalPath()
-    val cdrIn = s"${currentDir}/src/test/resources/cdr-bigger.csv"
-    //val cdrIn = s"${currentDir}/src/test/resources/cdr-small.csv"
-    val voronoiIn = s"${currentDir}/src/test/resources/centro_roma.csv"
+    val cdrIn = s"file://${currentDir}/src/test/resources/cdr-bigger.csv"
+    //val cdrIn = s"file://${currentDir}/src/test/resources/cdr-small.csv"
+    val voronoiIn = s"file://${currentDir}/src/test/resources/centro_roma.csv"
     val randomOut = Random.alphanumeric.take(10).mkString
-    val trainingOut = s"${currentDir}/src/test/resources/${randomOut}/trainingData"
-    val testOut = s"${currentDir}/src/test/resources/${randomOut}/testData"
-    val cpBaseOut = s"${currentDir}/src/test/resources/${randomOut}/cpBase"
-    val eventsOut = s"${currentDir}/src/test/resources/${randomOut}/events"
-    val eventsFilterOut = s"${currentDir}/src/test/resources/${randomOut}/eventsFilter"
+    val trainingOut = s"file://${currentDir}/src/test/resources/${randomOut}/trainingData"
+    val testOut = s"file://${currentDir}/src/test/resources/${randomOut}/testData"
+    val cpBaseOut = s"file://${currentDir}/src/test/resources/${randomOut}/cpBase"
+    val eventsOut = s"file://${currentDir}/src/test/resources/${randomOut}/events"
+    val eventsFilterOut = s"file://${currentDir}/src/test/resources/${randomOut}/eventsFilter"
 
     val props = ta.DataFilterSettings(
       Array("local", cdrIn, voronoiIn, trainingOut, testOut, "2015-06-10",
