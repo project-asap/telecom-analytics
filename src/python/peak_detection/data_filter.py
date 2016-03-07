@@ -1,20 +1,14 @@
 __author__ = 'paul'
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
+from pyspark import SparkContext
 import hdfs
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
 
 """
 Data Filter Module
 
 Given a CDR dataset and a set of geographical regions, it returns the hourly presence for each region.
 
-Usage: data_filter.py <folder> <spatial_division> <region> <timeframe> 
+Usage: data_filter.py <folder> <spatial_division> <region> <timeframe>
 
 --folder: hdfs folder where the CDR dataset is placed
 --spatial division: csv file with the format GSM tower id --> spatial region
@@ -52,7 +46,6 @@ def validate(date_text):
 def week_month(string):
     #settimana del mese
     d=datetime.datetime.strptime(string, '%Y%m%d')
-    w=(d.day-1)//7+1
     return d.isocalendar()[1]
 
 def is_we(string):
@@ -95,7 +88,7 @@ def normalize(profilo):
 
 def municipio(cell_id):
 	try:
-		c=cell2municipi[cell_id]
+		cell2municipi[cell_id]
 		return True
 	except KeyError:
 		return False
@@ -144,7 +137,7 @@ for i in range(0, len(files), 3):
         .filter(lambda x: municipio(x.split(';')[9].replace(" ",""))) \
         .map(lambda x: ((x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")],day_of_week( x.split(';')[3]), week_month(x.split(';')[3]),x.split(';')[4][:2], x.split(';')[3]), 1)) \
         .distinct() \
-        .reduceByKey(lambda x, y: x + y) 
+        .reduceByKey(lambda x, y: x + y)
 
     rddlist.append(lines)
 

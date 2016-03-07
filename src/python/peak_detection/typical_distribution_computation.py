@@ -1,15 +1,6 @@
 __author__ = 'paul'
-import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-import hdfs
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
+from pyspark import SparkContext
 
-import time
 import os,sys
 
 """
@@ -17,13 +8,13 @@ Typical Distribution Computation Module
 
 Given a hourly presence dataset (usually regarding a month of activity), it aggregates the presences according to week days and hours.
 
-Usage: typical_distribution_computation.py  <region> <timeframe> 
+Usage: typical_distribution_computation.py  <region> <timeframe>
 
 --region,timeframe: names of the file stored into the hdfs. E.g. Roma 11-2015
 
 example: pyspark typical_distribution_computation.py  roma 06-215
 
-It loads the hourly presences in /peaks/weekly_presence-<region>-<timeframe> and stores 
+It loads the hourly presences in /peaks/weekly_presence-<region>-<timeframe> and stores
 results into hdfs: /peaks/weekly_presence-<region>-<timeframe>
 
 """

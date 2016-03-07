@@ -1,22 +1,16 @@
-import datetime
-from pyspark import SparkContext, StorageLevel, RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
+from pyspark import SparkContext
 from sklearn.cluster import KMeans
 import numpy as np
 
-import time
 import os, sys
 
 """
 Profiles Clustering modules Module
 
-Given a set of users' profiles, it returns typical calling behaviors (clusters) 
+Given a set of users' profiles, it returns typical calling behaviors (clusters)
 and a label for each behavior (i.e. resident, commuter, etc.)
 
-Usage: clustering.py  <region> <timeframe> 
+Usage: clustering.py  <region> <timeframe>
 
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
@@ -43,10 +37,10 @@ def array_carretto_rossa(profilo,utente):
         week_ordering = f7([x[1] for x in profilo if x[0] == munic])
         obs = [x[1:] for x in profilo if x[0] == munic]
         obs = sorted(obs, key=lambda d: sum([j[3] for j in obs if j[0] == d[0]]), reverse=True)
-      
+
         week_ordering = f7([x[0] for x in obs ])
-        
-        
+
+
         carr = np.zeros(shape=24)
 
         for o in obs:
@@ -125,7 +119,7 @@ print 'hdfs://hdp1.itc.unipi.it:9000/profiles/' + "%s-%s" % (region, timeframe)
 
 #clustering!
 
-#r_carrelli = r.flatMap(lambda x: array_carretto(x[1]))
+r_carrelli = r.flatMap(lambda x: array_carretto(x[1]))
 
 lst= r.flatMap(lambda x: array_carretto_rossa(x[1],x[0]))
 

@@ -1,14 +1,8 @@
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
+from pyspark import SparkContext, StorageLevel
 import hdfs
 import time
-import os,sys 
+import os,sys
 
 
 """
@@ -16,7 +10,7 @@ User Profiling Module
 
 Given a CDR dataset and a set of geographical regions, it returns user profiles for each spatial region.
 
-Usage: user_profiling.py <folder> <spatial_division> <region> <timeframe> 
+Usage: user_profiling.py <folder> <spatial_division> <region> <timeframe>
 
 --folder: hdfs folder where the CDR dataset is placed
 --spatial division: csv file with the format GSM tower id --> spatial region
@@ -100,7 +94,7 @@ def normalize(profilo):
 
 def municipio(cell_id):
 	try:
-		c=cell2municipi[cell_id.replace(" ","")]
+		cell2municipi[cell_id.replace(" ","")]
 		return True
 	except KeyError:
 		return False
@@ -147,7 +141,7 @@ if len(files)%7!=0:
 for i in range(0,len(files),7):
     print "subset n.",i
     loc_file=files[i:i+7]
-    
+
 ###Processo:
  ##count giorni distinti di chiamata per ogni timeslot
 ## rimuovo day of week -> indicatore se ha telefonato o no in quel giorno in quello slot
@@ -164,8 +158,8 @@ for i in range(0,len(files),7):
       .reduceByKey(lambda x,y:x+y) \
       .map(lambda x: (x[0][0],[x[0][1:]+(x[1],),])) \
       .reduceByKey(lambda x,y:x+y) \
-      .persist( StorageLevel(False, True, False, False)) 
-    
+      .persist( StorageLevel(False, True, False, False))
+
     rddlist.append(lines)
 for r in range(len(rddlist)-1):
     rddlist[r+1]=rddlist[r].union(rddlist[r+1])
@@ -181,10 +175,10 @@ r=rddlist[-1].reduceByKey(lambda x,y:x+y)
 
 
 ##week ordering
-##keys: region,busiest week,workday/we,timeslice 
+##keys: region,busiest week,workday/we,timeslice
 r=r.map(lambda x: (x[0],sorted(x[1],key=lambda w: (w[0],sum([z[4] for z in x[1] if z[1]==w[1]]) , -w[2],w[3]),reverse=True)))
 
-r=r.map(lambda x: (x[0],normalize(x[1]))) 
+r=r.map(lambda x: (x[0],normalize(x[1])))
 
 #normalizzazione
 

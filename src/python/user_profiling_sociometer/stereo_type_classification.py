@@ -1,25 +1,17 @@
-import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-
-import numpy as np
-
+from pyspark import SparkContext
 
 """
 Stereo Type Classification  Module
 
 Given a set of users' profiles and a set of labeled calling behaviors, it returns the percentage of each label
-on each spatial region. 
-E.g.: 
+on each spatial region.
+E.g.:
 Region 1, resident, 75%
 Region 1, commuter, 20%
 ...
 
 
-Usage: stereo_type_classification.py  <region> <timeframe> 
+Usage: stereo_type_classification.py  <region> <timeframe>
 
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
@@ -30,7 +22,7 @@ Results are stored into file: sociometer-<region>-<timeframe>.csv
 """
 
 
-import os,sys
+import sys
 region=sys.argv[1]
 timeframe=sys.argv[2]
 def quiet_logs(sc):
@@ -49,7 +41,7 @@ def annota_utente(profilo,profiles,id):
 	for munic in set([x[0] for x in profilo]):
 		##settimana,work/we,timeslice, count normalizzato
 		week_ordering=f7([x[1] for x in profilo if x[0]==munic])
-		
+
 		obs=[x[1:] for x in profilo if x[0]==munic]
 		#carr=np.zeros(24)
 		carr=[0 for x in range(24)]
