@@ -114,8 +114,8 @@ archetipi = [(y[1], y[2:][:18]) for y in [x.split(';') for x in archetipi.split(
 sc = SparkContext()
 quiet_logs(sc)
 sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
-r = sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/' + "%s-%s" % (region, timeframe))
-print 'hdfs://hdp1.itc.unipi.it:9000/profiles/' + "%s-%s" % (region, timeframe)
+r = sc.pickleFile('hdfs://localhost:9000/profiles/' + "%s-%s" % (region, timeframe))
+print 'hdfs://localhost:9000/profiles/' + "%s-%s" % (region, timeframe)
 
 #clustering!
 
@@ -141,6 +141,6 @@ for ctr in centroidi:
         sorted([(c[0], euclidean(ctr, map(float, c[1]))) for  c in archetipi], key=lambda x: x[1])[0][0]
     tipi_centroidi.append((tipo_centroide, ctr))
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/centroids-%s-%s"%(region,timeframe))
-sc.parallelize(tipi_centroidi).saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids-%s-%s'%(region,timeframe))
+sc.parallelize(tipi_centroidi).saveAsPickleFile('hdfs://localhost:9000/profiles/centroids-%s-%s'%(region,timeframe))
 
 

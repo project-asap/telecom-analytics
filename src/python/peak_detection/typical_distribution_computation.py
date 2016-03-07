@@ -40,10 +40,10 @@ sc=SparkContext()
 
 
 
-chiamate_orarie=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/peaks/orarie_presence-'+"%s-%s"%(region,timeframe))
+chiamate_orarie=sc.pickleFile('hdfs://localhost:9000/peaks/orarie_presence-'+"%s-%s"%(region,timeframe))
 presenze_medie=chiamate_orarie.map(lambda x: ((x[0][0],x[0][1],x[0][3]),x[1]) ).groupByKey()
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/weekly_presence-%s-%s/" %(region,timeframe))
-presenze_medie.saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/peaks/weekly_presence-'+"%s-%s"%(region,timeframe))
+presenze_medie.saveAsPickleFile('hdfs://localhost:9000/peaks/weekly_presence-'+"%s-%s"%(region,timeframe))
 
 
 ##picchi ##

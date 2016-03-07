@@ -61,14 +61,14 @@ quiet_logs(sc)
 ##annotazione utenti
 
 ##open
-r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids-roma-11-2015')
-#r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids-%s-%s'%(region,timeframe))
+r=sc.pickleFile('hdfs://localhost:9000/profiles/centroids-roma-11-2015')
+#r=sc.pickleFile('hdfs://localhost:9000/profiles/centroids-%s-%s'%(region,timeframe))
 cntr=r.collect()
 
 profiles=[(x[0],x[1]) for x in cntr]
 
 print profiles[0]
-r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/'+"%s-%s"%(region,timeframe))
+r=sc.pickleFile('hdfs://localhost:9000/profiles/'+"%s-%s"%(region,timeframe))
 r_id= r.flatMap(lambda x:  annota_utente(x[1],profiles,x[0])).collect()
 
 userid=open('user_id-%s-%s.csv'%(region,timeframe),'w')

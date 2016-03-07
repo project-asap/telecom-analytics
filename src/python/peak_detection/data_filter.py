@@ -112,12 +112,12 @@ cell2municipi={k:v for k,v in [(x.split(';')[0].replace(" ",""),x.split(';')[1].
 sc=SparkContext()
 quiet_logs(sc)
 sc._conf.set('spark.executor.memory','24g').set('spark.driver.memory','24g').set('spark.driver.maxResultsSize','0')
-file_path='hdfs://hdp1.itc.unipi.it:9000/%s'%folder
+file_path='hdfs://localhost:9000/%s'%folder
 print file_path
 files=[]
 nfile=[]
 for x in hdfs.ls("/"+folder)[:]:
-	files.append("hdfs://hdp1.itc.unipi.it:9000%s"%(x))
+	files.append("hdfs://localhost:9000%s"%(x))
 
 start=time.time()
 rddlist=[]
@@ -152,4 +152,4 @@ chiamate_orarie = r.map(lambda x: ((x[0][1],x[0][2], x[0][3],x[0][4],x[0][5]), 1
 
 
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/hourly_presence-%s-%s/" %(region,timeframe))
-chiamate_orarie.saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/peaks/hourly_presence-'+"%s-%s"%(region,timeframe))
+chiamate_orarie.saveAsPickleFile('hdfs://localhost:9000/peaks/hourly_presence-'+"%s-%s"%(region,timeframe))

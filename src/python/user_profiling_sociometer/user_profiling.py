@@ -123,12 +123,12 @@ cell2municipi={k:v for k,v in [(x.split(';')[0],x.split(';')[1].replace("\n","")
 #####
 sc=SparkContext()
 quiet_logs(sc)
-file_path='hdfs://hdp1.itc.unipi.it:9000/%s'%folder
+file_path='hdfs://localhost:9000/%s'%folder
 files=[]
 nfile=[]
 
 for x in hdfs.ls("/"+folder)[:]:
-    files.append("hdfs://hdp1.itc.unipi.it:9000%s"%(x))
+    files.append("hdfs://localhost:9000%s"%(x))
 
 
 start=time.time()
@@ -186,4 +186,4 @@ print r.count()
 
 
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/%s-%s/" %(region,timeframe))
-r.saveAsPickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/'+"%s-%s"%(region,timeframe))
+r.saveAsPickleFile('hdfs://localhost:9000/profiles/'+"%s-%s"%(region,timeframe))
