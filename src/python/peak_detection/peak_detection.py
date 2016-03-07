@@ -20,18 +20,22 @@ results into standard csv file: rome_peaks<region>-<timeframe>-<spatial_division
 
 """
 
-spatial_division=sys.argv[1]
-region=sys.argv[2]
-timeframe=sys.argv[3]
+spatial_division = sys.argv[1]
+region = sys.argv[2]
+timeframe = sys.argv[3]
 
-sc=SparkContext()
-
-
-presenze_medie=sc.pickleFile('hdfs://localhost:9000/peaks/weekly_presence-'+"%s-%s"%(region,timeframe)).collectAsMap()
-
-chiamate_orarie=sc.pickleFile('hdfs://localhost:9000/peaks/orarie_presence-'+"%s-%s"%(region,timeframe))
+sc = SparkContext()
 
 
-peaks=open('rome_peaks%s-%s-%s.csv'%(region,timeframe,spatial_division.replace(".","").replace("/","")),'w')
-for l in  chiamate_orarie.collect():
-    print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][4],l[0][3],l[1]/np.mean(list(presenze_medie[(l[0][0],l[0][1],l[0][3])])))
+presenze_medie = sc.pickleFile(
+    'hdfs://localhost:9000/peaks/weekly_presence-' + "%s-%s" % (region, timeframe)).collectAsMap()
+
+chiamate_orarie = sc.pickleFile(
+    'hdfs://localhost:9000/peaks/orarie_presence-' + "%s-%s" % (region, timeframe))
+
+
+peaks = open('rome_peaks%s-%s-%s.csv' % (region, timeframe,
+                                         spatial_division.replace(".", "").replace("/", "")), 'w')
+for l in chiamate_orarie.collect():
+    print >>peaks, "%s,%s,%s,%s" % (l[0][0], l[0][4], l[0][3], l[
+                                    1] / np.mean(list(presenze_medie[(l[0][0], l[0][1], l[0][3])])))

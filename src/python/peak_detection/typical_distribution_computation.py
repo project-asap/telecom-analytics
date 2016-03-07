@@ -1,7 +1,8 @@
 __author__ = 'paul'
 from pyspark import SparkContext
 
-import os,sys
+import os
+import sys
 
 """
 Typical Distribution Computation Module
@@ -27,24 +28,26 @@ def quiet_logs(sc):
     logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
 
 
-region=sys.argv[1]
-timeframe=sys.argv[2]
+region = sys.argv[1]
+timeframe = sys.argv[2]
 
-###spatial division: cell_id->region of interest
+# spatial division: cell_id->region of interest
 
 
-###data loading
-#checking file existance
+# data loading
+# checking file existance
 #####
-sc=SparkContext()
+sc = SparkContext()
 
 
-
-chiamate_orarie=sc.pickleFile('hdfs://localhost:9000/peaks/orarie_presence-'+"%s-%s"%(region,timeframe))
-presenze_medie=chiamate_orarie.map(lambda x: ((x[0][0],x[0][1],x[0][3]),x[1]) ).groupByKey()
-os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/weekly_presence-%s-%s/" %(region,timeframe))
-presenze_medie.saveAsPickleFile('hdfs://localhost:9000/peaks/weekly_presence-'+"%s-%s"%(region,timeframe))
+chiamate_orarie = sc.pickleFile(
+    'hdfs://localhost:9000/peaks/orarie_presence-' + "%s-%s" % (region, timeframe))
+presenze_medie = chiamate_orarie.map(lambda x: (
+    (x[0][0], x[0][1], x[0][3]), x[1])).groupByKey()
+os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/weekly_presence-%s-%s/" %
+          (region, timeframe))
+presenze_medie.saveAsPickleFile(
+    'hdfs://localhost:9000/peaks/weekly_presence-' + "%s-%s" % (region, timeframe))
 
 
 ##picchi ##
-
