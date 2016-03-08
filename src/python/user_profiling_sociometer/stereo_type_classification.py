@@ -15,7 +15,7 @@ Usage: stereo_type_classification.py  <region> <timeframe>
 
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-example: pyspark stereo_type_classification.py  roma 06-2015
+example: pyspark stereo_type_classification.py roma 06-2015
 
 Results are stored into file: sociometer-<region>-<timeframe>.csv
 
@@ -34,7 +34,6 @@ def quiet_logs(sc):
 
 
 def euclidean(v1, v2):
-
     return sum([(v1[i] - v2[i])**2 for i in range(len(v1))])**0.5
 
 
@@ -49,7 +48,7 @@ def annota_utente(profilo, profiles, id):
 
         obs = [x[1:] for x in profilo if x[0] == munic]
         # carr=np.zeros(24)
-        carr = [0 for x in range(24)]
+        carr = [0 for x in range(18)]
         for o in obs:
             week_idx = week_ordering.index(o[0])
             idx = (week_idx - 1) * 6 + o[1] * 3 + o[2]
@@ -66,15 +65,12 @@ quiet_logs(sc)
 # annotazione utenti
 
 # open
-r = sc.pickleFile('hdfs://localhost:9000/profiles/centroids-roma-11-2015')
-# r=sc.pickleFile('hdfs://localhost:9000/profiles/centroids-%s-%s'%(region,timeframe))
+r = sc.pickleFile('/centroids-%s-%s' % (region, timeframe))
 cntr = r.collect()
 
 profiles = [(x[0], x[1]) for x in cntr]
 
-print profiles[0]
-r = sc.pickleFile('hdfs://localhost:9000/profiles/' +
-                  "%s-%s" % (region, timeframe))
+r = sc.pickleFile('/profiles-%s-%s' % (region, timeframe))
 r_id = r.flatMap(lambda x:  annota_utente(x[1], profiles, x[0])).collect()
 
 userid = open('user_id-%s-%s.csv' % (region, timeframe), 'w')
