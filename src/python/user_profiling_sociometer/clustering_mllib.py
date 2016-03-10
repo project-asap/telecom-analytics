@@ -1,5 +1,5 @@
 from pyspark import SparkContext
-from sklearn.cluster import KMeans
+from pyspark.mllib.clustering import KMeans
 import numpy as np
 
 import os
@@ -11,16 +11,15 @@ Profiles Clustering modules Module
 Given a set of users' profiles, it returns typical calling behaviors (clusters)
 and a label for each behavior (i.e. resident, commuter, etc.)
 
-Usage: clustering.py  <region> <timeframe>
+Usage: clustering-mllib.py  <region> <timeframe>
 
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-example: pyspark clustering.py roma 06-2015
+example: pyspark clustering-mllib.py roma 06-2015
 
 Results are stored into hdfs: /centroids-<region>-<timeframe>
 
 """
-
 
 def quiet_logs(sc):
     logger = sc._jvm.org.apache.log4j
@@ -84,7 +83,7 @@ archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.
 archetipi = [(y[1], y[2:][:18]) for y in [x.split(';')
                                           for x in archetipi.split("\n")[:-1]]]
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     region = sys.argv[1]
     timeframe = sys.argv[2]
 
@@ -100,19 +99,16 @@ if __name__ == "__main__":
 
     r_carrelli = r.flatMap(lambda x: array_carretto(x[1]))
 
-    percentage = int(r_carrelli.count() * 0.3)
+    percentage = 0.3
+    r_carrelli.sample(False, percentage, 0).filter(lambda l: sum(l)) # filtro passing by
+    # sample and filter out passing by
+    data = r_carrelli.sample(False, percentage, 0).filter(lambda l: sum(l)).map(lambda x: np.array(x))
 
-    data = [np.array(x) for x in r_carrelli.take(percentage) if len(
-        [y for y in x if y != 0]) > 1]  # filtro passing by
-
-
-    #kmns = KMeans(n_clusters=100, n_init=3, init='random')
-    #kmns = KMeans(n_clusters=100, n_init=3, init='random', n_jobs=-1) # turn on paralellization
-    kmns = KMeans(n_clusters=100, n_init=3, init='k-means++', n_jobs=-1) # use k-means++ initialization
-    kmns.fit(data)
+    #kmns = KMeans.train(data, 100, initializationMode="random")
+    kmns = KMeans.train(data, 100, initializationMode="k-means||")
     tipi_centroidi = []
     # centroids annotation
-    centroidi = kmns.cluster_centers_
+    centroidi = kmns.centers
 
     for ctr in centroidi:
         tipo_centroide = \
@@ -123,4 +119,3 @@ if __name__ == "__main__":
             (region, timeframe))
     sc.parallelize(tipi_centroidi).saveAsPickleFile(
         '/centroids-%s-%s' % (region, timeframe))
-
