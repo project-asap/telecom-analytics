@@ -73,7 +73,7 @@ profiles = [(x[0], x[1]) for x in cntr]
 r = sc.pickleFile('/profiles-%s-%s' % (region, timeframe))
 r_id = r.flatMap(lambda x:  annota_utente(x[1], profiles, x[0])).collect()
 
-r_auto = r.flatMap(lambda x:  annota_utente(x[1], profiles)) \
+r_auto = r.flatMap(lambda x:  annota_utente(x[1], profiles, x[0])) \
     .map(lambda x: ((x[0], x[1]), 1)) \
     .reduceByKey(lambda x, y: x + y)
 #
