@@ -28,10 +28,10 @@ sc = SparkContext()
 
 
 presenze_medie = sc.pickleFile(
-    'hdfs://localhost:9000/peaks/weekly_presence-' + "%s-%s" % (region, timeframe)).collectAsMap()
+    '/peaks/weekly_presence-' + "%s-%s" % (region, timeframe)).collectAsMap()
 
 chiamate_orarie = sc.pickleFile(
-    'hdfs://localhost:9000/peaks/orarie_presence-' + "%s-%s" % (region, timeframe))
+    '/peaks/hourly_presence-' + "%s-%s" % (region, timeframe))
 
 
 peaks = open('rome_peaks%s-%s-%s.csv' % (region, timeframe,
