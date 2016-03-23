@@ -9,8 +9,10 @@ from itertools import imap
 import time
 import sys
 
-#date_format = '%Y%m%d'
-date_format = '%Y-%m-%d'
+#DATE_FORMAT = '%Y%m%d'
+DATE_FORMAT = '%Y-%m-%d'
+
+MIN_PARTITIONS = 512
 
 """
 Spatio-temporal Aggregation module
@@ -45,7 +47,7 @@ def euclidean(v1, v2):
 def validate(date_text):
     # if the string is a date, return True (useful to filter csv header)
     try:
-        datetime.datetime.strptime(date_text, date_format)
+        datetime.datetime.strptime(date_text, DATE_FORMAT)
         return True
     except ValueError:
         return False
@@ -80,7 +82,7 @@ quiet_logs(sc)
 
 start = time.time()
 
-lines = sc.textFile(folder, minPartitions=32).map(
+lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
     lambda l: list(imap(str_.strip, l.split(';'))))
 
 # plot utenti con chiamate durante partite

@@ -6,8 +6,10 @@ import string as str_
 
 from itertools import imap
 
-#date_format = '%Y%m%d'
-date_format = '%Y-%m-%d'
+#DATE_FORMAT = '%Y%m%d'
+DATE_FORMAT = '%Y-%m-%d'
+
+MIN_PARTITIONS = 512
 
 """
 Data Filter Module
@@ -42,7 +44,7 @@ def quiet_logs(sc):
 def validate(date_text):
     # if the string is a date, return True (useful to filter csv header)
     try:
-        datetime.datetime.strptime(date_text, date_format)
+        datetime.datetime.strptime(date_text, DATE_FORMAT)
         return True
     except ValueError:
         return False
@@ -50,12 +52,12 @@ def validate(date_text):
 
 def week_month(string):
     # settimana del mese
-    d = datetime.datetime.strptime(string, date_format)
+    d = datetime.datetime.strptime(string, DATE_FORMAT)
     return d.isocalendar()[1]
 
 
 def day_of_week(string):
-    d = datetime.datetime.strptime(string, date_format)
+    d = datetime.datetime.strptime(string, DATE_FORMAT)
     return d.weekday()
 
 
@@ -89,7 +91,7 @@ sc._conf.set('spark.executor.memory', '24g').set(
     'spark.driver.memory', '24g').set('spark.driver.maxResultsSize', '0')
 
 start = time.time()
-lines = sc.textFile(folder, minPartitions=32).map(
+lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
     lambda l: list(imap(str_.strip, l.split(';'))))
 #if len(files) % 7 != 0:
 #    print "missing complete weeks in dataset"
