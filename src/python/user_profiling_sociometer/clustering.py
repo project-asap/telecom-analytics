@@ -105,10 +105,11 @@ if __name__ == "__main__":
     data = [np.array(x) for x in r_carrelli.take(percentage) if len(
         [y for y in x if y != 0]) > 1]  # filtro passing by
 
-
     #kmns = KMeans(n_clusters=100, n_init=3, init='random')
-    #kmns = KMeans(n_clusters=100, n_init=3, init='random', n_jobs=-1) # turn on paralellization
-    kmns = KMeans(n_clusters=100, n_init=3, init='k-means++', n_jobs=-1) # use k-means++ initialization
+    # kmns = KMeans(n_clusters=100, n_init=3, init='random', n_jobs=-1) # turn
+    # on paralellization
+    kmns = KMeans(n_clusters=100, n_init=3, init='k-means++',
+                  n_jobs=-1)  # use k-means++ initialization
     kmns.fit(data)
     tipi_centroidi = []
     # centroids annotation
@@ -120,7 +121,6 @@ if __name__ == "__main__":
                     for c in archetipi], key=lambda x: x[1])[0][0]
         tipi_centroidi.append((tipo_centroide, ctr))
     os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /centroids-%s-%s" %
-            (region, timeframe))
+              (region, timeframe))
     sc.parallelize(tipi_centroidi).saveAsPickleFile(
         '/centroids-%s-%s' % (region, timeframe))
-

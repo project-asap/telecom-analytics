@@ -21,6 +21,7 @@ Results are stored into hdfs: /centroids-<region>-<timeframe>
 
 """
 
+
 def quiet_logs(sc):
     logger = sc._jvm.org.apache.log4j
     logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
@@ -100,9 +101,11 @@ if __name__ == '__main__':
     r_carrelli = r.flatMap(lambda x: array_carretto(x[1]))
 
     percentage = 0.3
-    r_carrelli.sample(False, percentage, 0).filter(lambda l: sum(l)) # filtro passing by
+    r_carrelli.sample(False, percentage, 0).filter(
+        lambda l: sum(l))  # filtro passing by
     # sample and filter out passing by
-    data = r_carrelli.sample(False, percentage, 0).filter(lambda l: sum(l)).map(lambda x: np.array(x))
+    data = r_carrelli.sample(False, percentage, 0).filter(
+        lambda l: sum(l)).map(lambda x: np.array(x))
 
     #kmns = KMeans.train(data, 100, initializationMode="random")
     kmns = KMeans.train(data, 100, initializationMode="k-means||")
@@ -116,6 +119,6 @@ if __name__ == '__main__':
                     for c in archetipi], key=lambda x: x[1])[0][0]
         tipi_centroidi.append((tipo_centroide, ctr))
     os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /centroids-%s-%s" %
-            (region, timeframe))
+              (region, timeframe))
     sc.parallelize(tipi_centroidi).saveAsPickleFile(
         '/centroids-%s-%s' % (region, timeframe))

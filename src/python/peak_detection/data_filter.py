@@ -93,7 +93,7 @@ sc._conf.set('spark.executor.memory', '24g').set(
 start = time.time()
 lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
     lambda l: list(imap(str_.strip, l.split(';'))))
-#if len(files) % 7 != 0:
+# if len(files) % 7 != 0:
 #    print "missing complete weeks in dataset"
 #    # exit()
 
