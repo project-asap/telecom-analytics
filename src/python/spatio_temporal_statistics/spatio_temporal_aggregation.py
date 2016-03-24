@@ -12,7 +12,7 @@ import sys
 #DATE_FORMAT = '%Y%m%d'
 DATE_FORMAT = '%Y-%m-%d'
 
-MIN_PARTITIONS = 512
+MIN_PARTITIONS = 1024
 
 """
 Spatio-temporal Aggregation module
