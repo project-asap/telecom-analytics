@@ -75,10 +75,10 @@ object ClusteringHierRDD extends Clustering {
       .setMaster(master)
     val sc = new SparkContext(conf)
 
-    val pattern = """^\[(.*)\]$""".r
-    val data = sc.textFile(s"/r_carrelli-${region}-${timeframe}").map{
-      case pattern(s) =>
-        Vectors.dense(s.split(",", -1).map(_.trim.toDouble))
+    val p1 = """^\(u'(\w+)', \[(.*)\]\)$""".r
+    val dir = "/profiles-${region}-${timeframe}"
+    val data = sc.textFile(dir).map{ case p1(id, rest) =>
+      toCarretto( Profile.pattern.findAllIn(rest).toArray.map(Profile(_)) )
     }.cache
 
     val tipiCentroidi = run(data, clusterNum, subIterations)

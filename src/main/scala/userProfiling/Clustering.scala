@@ -78,6 +78,19 @@ class Clustering {
     val uv2 = util.Vector(v2.toArray)
     math.sqrt(uv1.squaredDist(uv2))
   }
+
+  def toCarretto(profilo: Array[Profile]) = {
+    val carretto = scala.collection.mutable.ArrayBuffer.empty[Double]
+    // consider first four weeks
+    // resulted Vector size should conform with the archetipi
+    for (w <- 1 to 4) for (isWeekend <- 0 to 1) for (t <- 0 to 2) {
+      profilo.find(p => p.week == w && (p.isWeekend == isWeekend && p.timesplit == t)) match {
+        case Some(p) => carretto += p.asInstanceOf[Profile].count
+        case _ => carretto += 0.0
+      }
+    }
+    Vectors.dense(carretto.toArray)
+  }
 }
 
 object Clustering extends Clustering {
@@ -93,10 +106,10 @@ object Clustering extends Clustering {
       .setMaster(master)
     val sc = new SparkContext(conf)
 
-    val pattern = """^\[(.*)\]$""".r
-    val data = sc.textFile(s"/r_carrelli-${region}-${timeframe}").map{
-      case pattern(s) =>
-        Vectors.dense(s.split(",", -1).map(_.trim.toDouble))
+    val p1 = """^\(u'(\w+)', \[(.*)\]\)$""".r
+    val dir = "/profiles-${region}-${timeframe}"
+    val data = sc.textFile(dir).map{ case p1(id, rest) =>
+      toCarretto( Profile.pattern.findAllIn(rest).toArray.map(Profile(_)) )
     }.cache
 
     val tipiCentroidi = run(data, clusterNum, subIterations)

@@ -134,3 +134,20 @@ object Antenna {
    }
   }
 }
+
+case class Profile(
+  val city: String,
+  val week: Int,
+  val isWeekend: Int,
+  val timesplit: Int,
+  val count: Double
+)
+object Profile {
+  val pattern = """\((\S*), (\d), (\d), (\d), (\d*.\d*)\)""".r
+  def apply(str: String) = {
+    str match {
+      case pattern(city, week, isWeekend, timesplit, count) =>
+        new Profile(city, week.toInt, isWeekend.toInt, timesplit.toInt, count.toDouble)
+    }
+  }
+}
