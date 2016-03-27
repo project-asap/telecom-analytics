@@ -14,27 +14,27 @@ import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
 
 import scala.util.{Try, Success, Failure}
 
-class Cluster(id: Int, maxIterations: Int) extends Splittable[Vector] with Serializable{
+class Cluster(id: Int, maxIterations: Int) extends Splittable[Vector] with Serializable {
   def id() = id
   var m : Try[KMeansModel] = null
 
-  private def safeTraining(data: RDD[Vector]) = {
-    Try (
-      KMeans.train(data, k=2, maxIterations=this.maxIterations)
-    )
-  }
-
   def this(id:Int, maxIterations: Int, data:RDD[Vector]) {
     this(id, maxIterations)
-    m = safeTraining(data)
+    m = Try ( KMeans.train(data, k = 2, maxIterations=this.maxIterations) )
   }
 
-  def splitIndex(point: Vector) = m.get.predict(point)
+  def splitIndex(point: Vector) = m match {
+    case Success(mdl) => mdl.predict(point)
+    case Failure(f) => 0
+  }
 
-  def contains(point: Vector) = (m.get.predict(point) == id)
+  def contains(point: Vector) = m match {
+    case Success(mdl) => mdl.predict(point) == id
+    case Failure(f) => false
+  }
 
   def split(level:Int, data:RDD[Vector]) : Array[Cluster] = {
-    if (m eq null) m = safeTraining(data)
+    if (m eq null) m = Try ( KMeans.train(data, k=2, maxIterations=this.maxIterations) )
     m match {
       case Success(mdl) => mdl.clusterCenters.zipWithIndex.map{ case (c, idx) =>
           new Cluster(idx, this.maxIterations, data)
@@ -49,18 +49,20 @@ class Cluster(id: Int, maxIterations: Int) extends Splittable[Vector] with Seria
   }
 }
 
-object ClusteringHierRDD extends Clustering {
+object ClusteringHierRDD extends Clustering {//with Logging {
   override def divise(data: RDD[Vector], clusterNum: Int, subIterations: Int) = {
     val initCluster = new Cluster(0, subIterations)
     val hierRDD = data.hierarchical2(initCluster, false)
     var split = hierRDD.splitPar
+    var clusters = Array[Vector]().par
 
     val depth = math.ceil(math.log10(clusterNum) / math.log10(2)).toInt
-    for (_ <- 1 to depth) {
+    for (i <- 1 to depth - 2) { // already split twice
       split = split.flatMap(_.splitPar)
     }
-    // keep only the leaf centers
-    split.map(_.s.asInstanceOf[Cluster].m.get.clusterCenters).flatten
+    clusters = split.map(c =>
+        Try(c.s.asInstanceOf[Cluster].m.get.clusterCenters).getOrElse(Array[Vector]())).flatten
+    clusters.toSet
   }
 
   def main(args: Array[String]) {
@@ -76,12 +78,14 @@ object ClusteringHierRDD extends Clustering {
     val sc = new SparkContext(conf)
 
     val p1 = """^\(u'(\w+)', \[(.*)\]\)$""".r
-    val dir = "/profiles-${region}-${timeframe}"
+    //val dir = "/profiles-${region}-${timeframe}"
+    val dir = "profiles-text"
     val data = sc.textFile(dir).map{ case p1(id, rest) =>
       toCarretto( Profile.pattern.findAllIn(rest).toArray.map(Profile(_)) )
     }.cache
 
     val tipiCentroidi = run(data, clusterNum, subIterations)
+    println(s"#centroids: ${tipiCentroidi.size}")
 
     sc.parallelize(tipiCentroidi.toList.toSeq).saveAsTextFile(s"/centroids-${region}-${timeframe}")
     sc.stop

@@ -45,8 +45,10 @@ class Clustering {
   }
 
   def divise(data: RDD[Vector], clusterNum: Int, subIterations: Int) = {
-    var clusters = Seq((Vectors.zeros(data.first.size), data)).par
-    while (clusters.size < clusterNum) {
+    var clusters = Seq((Vectors.dense(Array[Double]()), data)).par
+
+    val depth = math.ceil(math.log10(clusterNum) / math.log10(2)).toInt
+    for (_ <- 1 to depth) {
       clusters = clusters.flatMap{ case (c, d) => {
         split(d, subIterations) match {
           case Success(model) =>
@@ -59,7 +61,7 @@ class Clustering {
       }}
     }
     // keep only the centers
-    clusters.map(_._1)
+    clusters.map(_._1).toSet
   }
 
   def run(data: RDD[Vector], clusterNum: Int, subIterations: Int) = {
@@ -107,12 +109,14 @@ object Clustering extends Clustering {
     val sc = new SparkContext(conf)
 
     val p1 = """^\(u'(\w+)', \[(.*)\]\)$""".r
-    val dir = "/profiles-${region}-${timeframe}"
+    //val dir = "/profiles-${region}-${timeframe}"
+    val dir = "profiles-text"
     val data = sc.textFile(dir).map{ case p1(id, rest) =>
       toCarretto( Profile.pattern.findAllIn(rest).toArray.map(Profile(_)) )
     }.cache
 
     val tipiCentroidi = run(data, clusterNum, subIterations)
+    println(s"#centroids: ${tipiCentroidi.size}")
 
     sc.parallelize(tipiCentroidi.toList.toSeq).saveAsTextFile(s"/centroids-${region}-${timeframe}")
     sc.stop
