@@ -96,7 +96,9 @@ lines = lines.filter(lambda x: validate(x[3])) \
 chiamate_orarie = lines.map(lambda x: (
     (x[0][1], x[0][2], x[0][3]), 1)).reduceByKey(lambda x, y: x + y)
 
-with open('timeseries%s-%s-%s.csv' % (
-        region, timeframe, spatial_division.replace(".", "").replace("/", "")), 'a') as peaks:
+
+suffix = spatial_division.split('/')[-1]
+with open('timeseries%s-%s-%s' % (
+        region, timeframe, suffix), 'w') as peaks:
     for l in chiamate_orarie.collect():
         print >>peaks, "%s,%s,%s,%s" % (l[0][0], l[0][1], l[0][2], l[1])

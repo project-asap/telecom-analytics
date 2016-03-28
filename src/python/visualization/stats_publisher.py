@@ -8,7 +8,7 @@ Stats publisher module
 It transform the results of stats module (i.e. hourly presences computation given a spatial region) into
 json files compatible with weblyzard API
 
-Usage: stats_publisher.py <spatial_division> <region> <timeframe> 
+Usage: stats_publisher.py <spatial_division> <region> <timeframe>
 
 
 --spatial division: csv file with the format GSM tower id --> spatial region
@@ -28,8 +28,9 @@ timeframe = sys.argv[3]
 with open('roma_gsm.csv') as geo:
     coord = {x.split(";")[0][:5]: (x.split(";")[1:]) for x in geo.readlines()}
 
-with open('../statistics/timeseries%s-%s-%s.csv' %
-          (region, timeframe, spatial_division.split("/")[-1])) as peaks:
+suffix = spatial_division.split("/")[-1]
+with open('timeseries%s-%s-%s' %
+          (region, timeframe, suffix)) as peaks:
     obs = []
 
     for i, p in enumerate(peaks.readlines()):
