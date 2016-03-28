@@ -88,7 +88,7 @@ lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
 # plot utenti con chiamate durante partite
 lines = lines.filter(lambda x: validate(x[3])) \
     .filter(lambda x: municipio(x[9])) \
-    .map(lambda x: ((x[1], cell2municipi[x[9]], x[3], x[4][:2] ), 1)) \
+    .map(lambda x: ((x[1], x[9], x[3], x[4][:2] ), 1)) \
     .distinct() \
     .reduceByKey(lambda x, y: x + y) \
     .persist(StorageLevel(False, True, False, False))
