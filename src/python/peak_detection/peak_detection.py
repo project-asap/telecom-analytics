@@ -34,7 +34,7 @@ chiamate_orarie = sc.pickleFile(
     '/peaks/hourly_presence-' + "%s-%s" % (region, timeframe))
 
 suffix = spatial_division.split('/')[-1]
-peaks = open('rome_peaks%s-%s-%s' % (region, timeframe, suffix), 'w')
+peaks = open('peaks-%s-%s-%s' % (region, timeframe, suffix), 'w')
 for l in chiamate_orarie.collect():
     print >>peaks, "%s,%s,%s,%s" % (l[0][0], l[0][4], l[0][3], l[
                                     1] / np.mean(list(presenze_medie[(l[0][0], l[0][1], l[0][3])])))
