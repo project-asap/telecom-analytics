@@ -1,6 +1,8 @@
 import json
-import datetime
 import sys
+
+from datetime import datetime
+from time import mktime
 
 """
 Stats publisher module
@@ -25,6 +27,10 @@ spatial_division = sys.argv[1]
 region = sys.argv[2]
 timeframe = sys.argv[3]
 
+from_date_format = '%Y-%m-%d'
+id_to_name = lambda id: id.replace("_", " ")
+to_timestamp = lambda d: int(mktime(d.timetuple()))
+
 with open('spatial_regions/roma_gsm.csv') as geo:
     coord = {x.split(";")[0][:5]: (x.split(";")[1:]) for x in geo.readlines()}
 
@@ -38,14 +44,18 @@ with open('timeseries%s-%s-%s' %
         target_location = s[0]
         loc = coord[s[0][:-2]]
         value = s[-1]
+        date = datetime.strptime(s[1], from_date_format)
+        hour = int(s[2])
         d = {}
-        d["_id"] = i
         d["value"] = str(value).strip("\n")
-        d["date"] = '%s %s' % (s[1], s[2])
+        d["date"] = to_timestamp(date.replace(hour=hour))
+        d["added_date"] = to_timestamp(datetime.now())
         d["target_location"] = [{"name": target_location, "point": {
             "lat": loc[0], "lon":loc[1].strip("\n")}}]
-        d["indicator_id"] = "hourly presence"
-        d["indicator_name"] = "hourly presence"
+        d["indicator_id"] = "AreaPresence"
+        d["_id"] = "%s_%s" % (d["indicator_id"], i)
+        d["indicator_name"] = id_to_name(d["indicator_id"])
+        d["uri"] = 'http://example.com/%s/%s' % (d["indicator_id"], d["_id"])
         obs.append(d)
 
 with open("wl_timeseries%s-%s-%sarea_presence.json" %
