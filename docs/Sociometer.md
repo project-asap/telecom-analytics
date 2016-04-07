@@ -10,7 +10,7 @@ The complete workflow involves the usage of the following modules (in the same o
 
 Input parameter:
 - folder: the hdfs folder where the dataset is located. In order to let the profiles be computed, it needs at least 3 weeks of data. Dataset is assumed to be splitted into days (e.g. one day = one csv file).
-- spatial_division: A csv file containing the spatial region of each GSM tower. E.g. “***REMOVED***;city_center”.
+- spatial_division: A csv file containing the spatial region of each GSM tower. E.g. “antenna;city_center”.
 - region: a string containing the name of the region related to the dataset
 - timeframe: a string containing the period related to the dataset
 
