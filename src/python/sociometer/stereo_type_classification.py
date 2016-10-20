@@ -18,7 +18,13 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+
 from pyspark import SparkContext
+from pyspark.mllib.clustering import KMeansModel
+
+import re
+import os
+import sys
 
 """
 Stereo Type Classification  Module
@@ -35,75 +41,52 @@ Usage: stereo_type_classification.py  <region> <timeframe>
 
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-example: pyspark stereo_type_classification.py roma 06-2015
+example: pyspark stereo_type_classification.py  roma 06-2015
 
 Results are stored into file: sociometer-<region>-<timeframe>.csv
 
 """
 
+def user_type(profile, model, centroids):
+    if len([x for x in profile if x != 0]) == 1 and sum(profile) < 0.5:
+        return 'passing by'
+    else:
+        idx = model.predict(profile)
+        cluster = model.clusterCenters[idx]
+        return centroids[cluster]
 
-import sys
-region = sys.argv[1]
-timeframe = sys.argv[2]
+if __name__ == '__main__':
+    sc = SparkContext()
+    # annotazione utenti
 
+    folder = sys.argv[1]
 
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+    # open
+    pattern = r'/centroids/(?P<region>\w+)-(?P<start_week>\w+)-(?P<end_week>\w+)'
+    m = re.search(pattern, folder)
+    region, start_week, end_week = m.groups()
 
+    r = sc.pickleFile(folder)
+    centroids = {tuple(v.tolist()): k for k, v in r.collect()}
+    model = KMeansModel(centroids.keys())
 
-def euclidean(v1, v2):
-    return sum([(v1[i] - v2[i])**2 for i in range(len(v1))])**0.5
+    r = sc.pickleFile('/profiles/%s-%s-%s' % (region, start_week, end_week))
 
+    # format: (user_id, profile)
+    r_auto = r.map(lambda (region, user_id, profile):
+                       (region, user_type(profile, model, centroids), user_id, profile)) \
+        .map(lambda x: ((x[0], x[1]), 1)) \
+        .reduceByKey(lambda x, y: x + y)
 
-def annota_utente(profilo, profiles, id):
-    def f7(seq):
-        seen = set()
-        seen_add = seen.add
-        return [x for x in seq if not (x in seen or seen_add(x))]
-    for munic in set([x[0] for x in profilo]):
-        # settimana,work/we,timeslice, count normalizzato
-        week_ordering = f7([x[1] for x in profilo if x[0] == munic])
+    # ottengo coppie municipio,id_cluster
 
-        obs = [x[1:] for x in profilo if x[0] == munic]
-        # carr=np.zeros(24)
-        carr = [0 for x in range(18)]
-        for o in obs:
-            week_idx = week_ordering.index(o[0])
-            idx = (week_idx - 1) * 6 + o[1] * 3 + o[2]
-            carr[idx] = o[3]
-        tipo_utente = sorted([(c[0], euclidean(carr, list(c[1])))
-                              for c in profiles], key=lambda x: x[1])[0][0]
-        if len([x for x in carr if x != 0]) == 1:
-            tipo_utente = 'passing by'
-        yield (id, munic, tipo_utente)
-
-
-sc = SparkContext()
-quiet_logs(sc)
-# annotazione utenti
-
-# open
-r = sc.pickleFile('/centroids-%s-%s' % (region, timeframe))
-cntr = r.collect()
-
-profiles = [(x[0], x[1]) for x in cntr]
-
-r = sc.pickleFile('/profiles-%s-%s' % (region, timeframe))
-r_id = r.flatMap(lambda x:  annota_utente(x[1], profiles, x[0])).collect()
-
-r_auto = r.flatMap(lambda x:  annota_utente(x[1], profiles, x[0])) \
-    .map(lambda x: ((x[0], x[1]), 1)) \
-    .reduceByKey(lambda x, y: x + y)
-#
-# ottengo coppie municipio,id_cluster
-# risultato finale
-#
-lst = r_auto.collect()
-sociometer = [(x[0], x[1] * 1.0 / sum([y[1]
-                                       for y in lst if y[0][0] == x[0][0]])) for x in lst]
-outfile = open('sociometer-%s-%s' % (region, timeframe), 'w')
-print >>outfile, "municipio, profilo, percentage"
-for s in sorted(sociometer, key=lambda x: x[0][0]):
-    print>>outfile, s[0][0], s[0][1].replace("\n", ""), s[1]
+    # risultato finale
+    #
+    lst = r_auto.collect()
+    sociometer = [(x[0], x[1] * 1.0 / sum([y[1]
+                                        for y in lst if y[0][0] == x[0][0]])) for x in lst]
+    with open("sociometer-%s-%s_%s" %
+              (region, start_week, end_week), 'w') as outfile:
+        print >>outfile, "region, profile, percentage"
+        for s in sorted(sociometer, key=lambda x: x[0][0]):
+            print>>outfile, s[0][0], s[0][1].replace("\n", ""), s[1]
