@@ -18,21 +18,17 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+
 __author__ = 'paul'
-import datetime
+
 from pyspark import SparkContext, StorageLevel
 
-import string as str_
-
-from itertools import imap
-
-import time
+import datetime
+import string
 import sys
 
-#DATE_FORMAT = '%Y%m%d'
-DATE_FORMAT = '%Y-%m-%d'
-
-MIN_PARTITIONS = 1024
+from itertools import imap
+from cdr import CDR
 
 """
 Spatio-temporal Aggregation module
@@ -45,80 +41,49 @@ Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timef
 --spatial division: csv file with the format GSM tower id --> spatial region
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-example: pyspark spatio_temporal_aggreation.py /dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-215
+example: pyspark spatio_temporal_aggreation.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
 
 Results are stored into file: timeseries-<region>-<timeframe>-<spatial_division>.csv
 
 """
 
+ARG_DATE_FORMAT = '%Y-%m-%d'
 
-########################functions##################################
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+if __name__ == '__main__':
+    folder = sys.argv[1]
+    spatial_division = sys.argv[2]
+    start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+    end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
+    # spatial division: cell_id->region of interest
+    with open(spatial_division) as file:
+        # converting cell to municipality
+        cell2region = {k: v for k, v in [
+            imap(string.strip, x.split(';')) for x in file.readlines()]}
 
-def euclidean(v1, v2):
-    print v1, v2
-    return sum([abs(v1[i] - v2[i])**2 for i in range(len(v1))])**0.5
+    sc = SparkContext()
+    lines = sc.textFile(folder) \
+        .map(lambda x: CDR.from_string(x)) \
+        .filter(lambda x: x is not None) \
+        .filter(lambda x: x.valid_region(cell2region)) \
+        .filter(lambda x: start_date <= x.date <= end_date) \
+        .map(lambda x: ((x.user_id,
+                         x.region(cell2region),
+                         x.date,
+                         x.time[:2]),
+                        1)) \
+        .distinct() \
+        .reduceByKey(lambda x, y: x + y) \
+        .persist(StorageLevel(False, True, False, False))
 
+    hourly_presence = lines.map(
+        lambda ((user_id, region, date, time), _): (
+            (region, date, time), 1)).reduceByKey(lambda x, y: x + y)
 
-def validate(date_text):
-    # if the string is a date, return True (useful to filter csv header)
-    try:
-        datetime.datetime.strptime(date_text, DATE_FORMAT)
-        return True
-    except ValueError:
-        return False
-
-
-def municipio(cell_id):
-    try:
-        cell2municipi[cell_id]
-        return True
-    except KeyError:
-        return False
-
-
-##########################################################################
-folder = sys.argv[1]
-spatial_division = sys.argv[2]
-region = sys.argv[3]
-timeframe = sys.argv[4]
-
-# spatial division: cell_id->region of interest
-
-with open(spatial_division) as file:
-    # converting cell to municipality
-    cell2municipi = {k: v for k, v in [(x.split(';')[0].replace(
-        " ", ""), x.split(';')[1].replace("\n", "")) for x in file.readlines()]}
-
-# data loading
-# checking file existence
-#####
-sc = SparkContext()
-quiet_logs(sc)
-
-start = time.time()
-
-lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
-    lambda l: list(imap(str_.strip, l.split(';'))))
-
-# plot utenti con chiamate durante partite
-lines = lines.filter(lambda x: validate(x[3])) \
-    .filter(lambda x: municipio(x[9])) \
-    .map(lambda x: ((x[1], x[9], x[3], x[4][:2] ), 1)) \
-    .distinct() \
-    .reduceByKey(lambda x, y: x + y) \
-    .persist(StorageLevel(False, True, False, False))
-
-chiamate_orarie = lines.map(lambda x: (
-    (x[0][1], x[0][2], x[0][3]), 1)).reduceByKey(lambda x, y: x + y)
-
-
-suffix = spatial_division.split('/')[-1]
-with open('timeseries%s-%s-%s' % (
-        region, timeframe, suffix), 'w') as peaks:
-    for l in chiamate_orarie.collect():
-        print >>peaks, "%s,%s,%s,%s" % (l[0][0], l[0][1], l[0][2], l[1])
+    area = spatial_division.split('/')[-1].split('.')[0]
+    name = 'timeseries_%s_%s_%s' % (area,
+                                   start_date.strftime(ARG_DATE_FORMAT),
+                                   end_date.strftime(ARG_DATE_FORMAT))
+    with open(name, 'w') as peaks:
+        for (region, date, time), count in hourly_presence.collect():
+            print >>peaks, "%s,%s,%s,%s" % (region, date, time, count)
