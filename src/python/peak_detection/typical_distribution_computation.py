@@ -21,6 +21,7 @@
 __author__ = 'paul'
 from pyspark import SparkContext
 
+import re
 import os
 import sys
 
@@ -42,32 +43,19 @@ results into hdfs: /peaks/weekly_presence-<region>-<timeframe>
 
 
 ########################functions##################################
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+if __name__ == '__main__':
+    folder = sys.argv[1]
 
+    sc = SparkContext()
 
-region = sys.argv[1]
-timeframe = sys.argv[2]
+    hourly_calls = sc.pickleFile(folder)
 
-# spatial division: cell_id->region of interest
+    # format: region, weekday, hour
+    mean_presence = hourly_calls.map(
+        lambda ((region, dow, hour, start_date), count): (
+            (region, dow, hour), count)
+    ).groupByKey()
 
-
-# data loading
-# checking file existance
-#####
-sc = SparkContext()
-
-
-chiamate_orarie = sc.pickleFile(
-    '/peaks/hourly_presence-' + "%s-%s" % (region, timeframe))
-presenze_medie = chiamate_orarie.map(lambda x: (
-    (x[0][0], x[0][1], x[0][3]), x[1])).groupByKey()
-os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/weekly_presence-%s-%s/" %
-          (region, timeframe))
-presenze_medie.saveAsPickleFile(
-    '/peaks/weekly_presence-' + "%s-%s" % (region, timeframe))
-
-
-##picchi ##
+    name = folder.replace('hourly', 'weekly')
+    os.system("$HADOOP_PREFIX/bin/hadoop fs -rm -r %s" % name)
+    mean_presence.saveAsPickleFile(name)

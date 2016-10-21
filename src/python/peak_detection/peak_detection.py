@@ -21,6 +21,7 @@
 __author__ = 'paul'
 from pyspark import SparkContext
 import numpy as np
+import re
 import sys
 
 """
@@ -40,21 +41,21 @@ results into standard csv file: rome_peaks<region>-<timeframe>-<spatial_division
 
 """
 
-spatial_division = sys.argv[1]
-region = sys.argv[2]
-timeframe = sys.argv[3]
+if __name__ == '__main__':
+    hourly_dataset = sys.argv[1]
+    weekly_dataset = sys.argv[2]
 
-sc = SparkContext()
+    sc = SparkContext()
 
+    mean_presence = sc.pickleFile(weekly_dataset).collectAsMap()
 
-presenze_medie = sc.pickleFile(
-    '/peaks/weekly_presence-' + "%s-%s" % (region, timeframe)).collectAsMap()
+    hourly_calls = sc.pickleFile(hourly_dataset)
 
-chiamate_orarie = sc.pickleFile(
-    '/peaks/hourly_presence-' + "%s-%s" % (region, timeframe))
-
-suffix = spatial_division.split('/')[-1]
-peaks = open('peaks-%s-%s-%s' % (region, timeframe, suffix), 'w')
-for l in chiamate_orarie.collect():
-    print >>peaks, "%s,%s,%s,%s" % (l[0][0], l[0][4], l[0][3], l[
-                                    1] / np.mean(list(presenze_medie[(l[0][0], l[0][1], l[0][3])])))
+    pattern = r'/peaks/hourly_(?P<region>\w+)_(?P<start_date>\w+-\w+-\w+)_(?P<wnd_date>\w+-\w+-\w+)'
+    m = re.search(pattern, hourly_dataset)
+    region, start_date, end_date = m.groups()
+    peaks = open('peaks_%s_%s_%s.csv' % (region, start_date, end_date), 'w')
+    # format: area, hour, date-> percentage
+    for ((area, dow, hour, start_date), count) in hourly_calls.collect():
+        print >>peaks, "%s,%s,%s,%s,%s" % (area, hour, dow, start_date,
+                                           count / np.mean(list(mean_presence[(area, dow, hour)])))

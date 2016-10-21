@@ -18,18 +18,18 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+
 __author__ = 'paul'
+
 import datetime
-from pyspark import SparkContext
+from pyspark import SparkContext, StorageLevel
 
-import string as str_
+from itertools import imap, ifilter
+from cdr import CDR
 
-from itertools import imap
-
-#DATE_FORMAT = '%Y%m%d'
-DATE_FORMAT = '%Y-%m-%d'
-
-MIN_PARTITIONS = 512
+import os
+import sys
+import string
 
 """
 Data Filter Module
@@ -42,95 +42,56 @@ Usage: data_filter.py <folder> <spatial_division> <region> <timeframe>
 --spatial division: csv file with the format GSM tower id --> spatial region
 --region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-example: pyspark data_filter.py /dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-215
+example: pyspark data_filter.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
 
 Results are stored into hdfs: /peaks/hourly_presence-<region>-<timeframe>
 
 """
 
+ARG_DATE_FORMAT = '%Y-%m-%d'
 
-import time
-import os
-import sys
-########################functions##################################
+if __name__ == '__main__':
+    folder = sys.argv[1]
+    spatial_division = sys.argv[2]
+    start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+    end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
+    with open(spatial_division) as file:
+        # converting cell to municipality
+        cell2region = {k: v for k, v in [
+            imap(string.strip, x.split(';')) for x in file.readlines()]}
 
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+    sc = SparkContext()
+    #sc._conf.set('spark.executor.memory','24g') \
+    #    .set('spark.driver.memory','24g'). \
+    #    set('spark.driver.maxResultsSize','0')
 
+    # TODO check for complete weeks in dataset
 
-def validate(date_text):
-    # if the string is a date, return True (useful to filter csv header)
-    try:
-        datetime.datetime.strptime(date_text, DATE_FORMAT)
-        return True
-    except ValueError:
-        return False
+    r = sc.textFile(folder) \
+        .map(lambda x: CDR.from_string(x)) \
+        .filter(lambda x: x is not None) \
+        .filter(lambda x: x.valid_region(cell2region)) \
+        .filter(lambda x: start_date <= x.date <= end_date) \
+        .map(lambda x: ((x.user_id,
+                         x.region(cell2region),
+                         x.day_of_week(),
+                         x.time[:2],
+                         x.date),
+                        1)) \
+        .distinct() \
+        .reduceByKey(lambda x, y: x + y) \
+        .persist(StorageLevel(True, False, False, False, 1))
 
+    hourly_calls = r.map(
+        lambda ((_, region, dow, hour, date), count):
+            ((region, dow, hour, date), 1.0)) \
+        .reduceByKey(lambda x, y: (x + y))
 
-def week_month(string):
-    # settimana del mese
-    d = datetime.datetime.strptime(string, DATE_FORMAT)
-    return d.isocalendar()[1]
-
-
-def day_of_week(string):
-    d = datetime.datetime.strptime(string, DATE_FORMAT)
-    return d.weekday()
-
-
-def municipio(cell_id):
-    try:
-        cell2municipi[cell_id]
-        return True
-    except KeyError:
-        return False
-
-
-##########################################################################
-folder = sys.argv[1]
-spatial_division = sys.argv[2]
-region = sys.argv[3]
-timeframe = sys.argv[4]
-
-# spatial division: cell_id->region of interest
-
-with open(spatial_division) as file:
-    # converting cell to municipality
-    cell2municipi = {k: v for k, v in [(x.split(';')[0].replace(
-        " ", ""), x.split(';')[1].replace("\n", "")) for x in file.readlines()]}
-
-# data loading
-# checking file existence
-#####
-sc = SparkContext()
-quiet_logs(sc)
-sc._conf.set('spark.executor.memory', '24g').set(
-    'spark.driver.memory', '24g').set('spark.driver.maxResultsSize', '0')
-
-start = time.time()
-lines = sc.textFile(folder, minPartitions=MIN_PARTITIONS).map(
-    lambda l: list(imap(str_.strip, l.split(';'))))
-# if len(files) % 7 != 0:
-#    print "missing complete weeks in dataset"
-#    # exit()
-
-# plot utenti con chiamate durante partite
-r = lines.filter(lambda x: validate(x[3])) \
-    .filter(lambda x: municipio(x[9])) \
-    .map(lambda x: ((x[1], cell2municipi[x[9]], day_of_week(x[3]), week_month(x[3]), x[4][:2], x[3]), 1)) \
-    .distinct() \
-    .reduceByKey(lambda x, y: x + y)
-
-###
-
-chiamate_orarie = r.map(lambda x: ((x[0][1], x[0][2], x[0][3], x[0][4], x[
-                        0][5]), 1.0)).reduceByKey(lambda x, y: (x + y))
-
-
-os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /peaks/hourly_presence-%s-%s/" %
-          (region, timeframe))
-chiamate_orarie.saveAsPickleFile(
-    '/peaks/hourly_presence-' + "%s-%s" % (region, timeframe))
+    region = spatial_division.split('/')[-1].split('_')[-1].split('.')[0]
+    name = '/peaks/hourly_%s_%s_%s' % (
+        region,
+        start_date.strftime(ARG_DATE_FORMAT),
+        end_date.strftime(ARG_DATE_FORMAT))
+    os.system("$HADOOP_PREFIX/bin/hdfs dfs -rm -r %s" % name)
+    hourly_calls.saveAsPickleFile(name)
