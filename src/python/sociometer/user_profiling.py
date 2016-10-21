@@ -45,6 +45,8 @@ Results are stored into hdfs: /peaks/profiles-<region>-<timeframe>
 
 """
 
+ARG_DATE_FORMAT = '%Y-%m-%d'
+
 ########################functions##################################
 
 def array_carretto(profilo, weeks, user_id):
@@ -74,6 +76,11 @@ def normalize(profilo):
 if __name__ == '__main__':
     folder = sys.argv[1]
     spatial_division = sys.argv[2]
+    start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+    end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
+
+    weeks = [d.isocalendar()[:2] for d in rrule.rrule(
+        rrule.WEEKLY, dtstart=start_date, until=end_date)]
 
     # spatial division: cell_id->region of interest
     with open(spatial_division) as file:
@@ -83,18 +90,11 @@ if __name__ == '__main__':
 
     #####
     sc = SparkContext()
-
     data = sc.textFile(folder) \
         .map(lambda row: CDR.from_string(row)) \
         .filter(lambda x: x is not None) \
         .filter(lambda x: x.valid_region(cell2region)) \
-        .cache()
-
-    start_date = data.min(lambda c: c.date).date
-    end_date = data.max(lambda c: c.date).date
-    weeks = [d.isocalendar()[:2] for d in rrule.rrule(
-        rrule.WEEKLY, dtstart=start_date, until=end_date)]
-    print('timeframe:%s-%s' % (start_date, end_date))
+        .filter(lambda x: start_date <= x.date <= end_date) \
 
     for t in weeks[::4]:
         idx = weeks.index(t)
