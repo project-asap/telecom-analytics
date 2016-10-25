@@ -18,28 +18,38 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+
+"""Typical Distribution Computation Module.
+
+Given an hourly presence dataset (usually regarding a month of activity),
+it aggregates the presences ccording to week days and hours.
+More specifically the results are tuples containing the following information:
+<region>,<day_of_week>,<hour_of_day>,<count>
+
+Usage:
+    $SPARK_HOME/bin/spark-submit peak_detection/typical_distribution_computation.py <dataset>
+
+Args:
+    dataset: The hourly presence dataset consisting of tuples containing the
+             following information:
+             <region>,<day_of_week>,<hour_of_day>,<date>,<count>
+
+Results are stored into hdfs: /peaks/weekly_<region>_<start_date>_<end_date>
+where the <region>, <start_date> and <end_date> are derived by the name of the dataset.
+
+Example:
+    $SPARK_HOME/bin/spark-submit peaks_detection/typical_distribution_computation.py \
+/peaks/hourly_roma_2016-01-01_2016-01-31
+
+"""
+
 __author__ = 'paul'
+
 from pyspark import SparkContext
 
-import re
 import os
 import sys
 
-"""
-Typical Distribution Computation Module
-
-Given a hourly presence dataset (usually regarding a month of activity), it aggregates the presences according to week days and hours.
-
-Usage: typical_distribution_computation.py  <region> <timeframe>
-
---region,timeframe: names of the file stored into the hdfs. E.g. Roma 11-2015
-
-example: pyspark typical_distribution_computation.py  roma 06-215
-
-It loads the hourly presences in /peaks/weekly_presence-<region>-<timeframe> and stores
-results into hdfs: /peaks/weekly_presence-<region>-<timeframe>
-
-"""
 
 
 ########################functions##################################

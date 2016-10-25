@@ -19,34 +19,46 @@
 # under the License.
 #
 
+"""Data Filter Module.
+
+Given a CDR dataset and a set of geographical regions, it returns the hourly
+presence for each region. More specifically the results are tuples containing
+the following information:
+<region>,<day_of_week>,<hour_of_day>,<date>,<count>
+
+Usage:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py peak_detection/data_filter.py \
+<dataset> <spatial_division> <start_date> <end_date>
+
+Args:
+    dataset: The dataset location. Can be any Hadoop-supported file system URI.
+             The expected dataset schema is:
+             user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
+             The start_time column is expected to have this format: '%Y-%m-%d %X'.
+    spatial_division: File containing the mapping of cells to regions.
+    start_date: The starting date of the analysis (format: %Y-%m-%d)
+    end_date: The ending date of the analysis (format: %Y-%m-%d)
+
+Results are stored into the hdfs file: /peaks/hourly_<region>_<start_date>_<end_date>
+where the <region> is derived by the spatial_division.
+
+Example:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py peak_detection/data_filter.py \
+hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv 2016-01-01 2016-01-31
+"""
+
 __author__ = 'paul'
 
 import datetime
 from pyspark import SparkContext, StorageLevel
 
-from itertools import imap, ifilter
+from itertools import imap
 from cdr import CDR
 
 import os
 import sys
 import string
 
-"""
-Data Filter Module
-
-Given a CDR dataset and a set of geographical regions, it returns the hourly presence for each region.
-
-Usage: data_filter.py <folder> <spatial_division> <region> <timeframe>
-
---folder: hdfs folder where the CDR dataset is placed
---spatial division: csv file with the format GSM tower id --> spatial region
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
-
-example: pyspark data_filter.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
-
-Results are stored into hdfs: /peaks/hourly_presence-<region>-<timeframe>
-
-"""
 
 ARG_DATE_FORMAT = '%Y-%m-%d'
 

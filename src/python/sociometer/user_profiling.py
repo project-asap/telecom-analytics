@@ -19,7 +19,36 @@
 # under the License.
 #
 
+"""User Profiling Module.
+
+Given a CDR dataset and a set of geographical regions, it splits the analysis
+period in 4-week windows and for each it computes the profile of each user
+for each spatial region.
+
+Usage:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py sociometer/user_profiling.py <dataset> <spatial_division> <start_date> <end_date>
+
+Args:
+    dataset: The dataset location. Can be any Hadoop-supported file system URI.
+             The expected dataset schema is:
+             user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
+             The start_time column is expected to have this format: '%Y-%m-%d %X'.
+    spatial_division: File containing the mapping of cells to regions.
+    start_date: The starting date of the analysis (format: %Y-%m-%d)
+    end_date: The ending date of the analysis (format: %Y-%m-%d)
+
+The results are stored into hdfs: /peaks/profiles-<start_week>-<end_week>
+where start_week and end_week are the starting and the ending week
+(format: <ISO_year>_<ISO_week>) of the specific time window.
+
+Example:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py sociometer/user_profiling.py hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv 2016-01-01 2016-01-31
+"""
+
+ARG_DATE_FORMAT = '%Y-%m-%d'
+
 from pyspark import SparkContext
+
 import os
 import string
 import sys
@@ -27,25 +56,6 @@ import sys
 from dateutil import rrule
 from itertools import imap
 from cdr import *
-
-"""
-User Profiling Module
-
-Given a CDR dataset and a set of geographical regions, it returns user profiles for each spatial region.
-
-Usage: user_profiling.py <folder> <spatial_division> <region> <timeframe>
-
---folder: hdfs folder where the CDR dataset is placed
---spatial division: csv file with the format GSM tower id --> spatial region
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
-
-example: pyspark user_profiling.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
-
-Results are stored into hdfs: /peaks/profiles-<region>-<timeframe>
-
-"""
-
-ARG_DATE_FORMAT = '%Y-%m-%d'
 
 ########################functions##################################
 

@@ -19,6 +19,33 @@
 # under the License.
 #
 
+"""Spatio-temporal Aggregation module.
+
+Given a CDR dataset and a set of geographical regions, it returns presences timeseries for each spatial region.
+More specifically the results are tuples containing the following information:
+<region>,<date>,<time>,<count>
+
+Usage:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
+<dataset> <spatial_division> <start_date> <end_date>
+
+Args:
+    dataset: The dataset location. Can be any Hadoop-supported file system URI.
+             The expected dataset schema is:
+             user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
+             The start_time column is expected to have this format: '%Y-%m-%d %X'.
+    spatial_division: File containing the mapping of cells to regions.
+    start_date: The starting date of the analysis (format: %Y-%m-%d)
+    end_date: The ending date of the analysis (format: %Y-%m-%d)
+
+Results are stored into the local file: timeseries-<region>-<start_date>-<end_date>
+where the <region> is derived by the spatial_division.
+
+Example:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
+hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv 2016-01-01 2016-01-31
+"""
+
 __author__ = 'paul'
 
 from pyspark import SparkContext, StorageLevel
@@ -30,22 +57,6 @@ import sys
 from itertools import imap
 from cdr import CDR
 
-"""
-Spatio-temporal Aggregation module
-
-Given a CDR dataset and a set of geographical regions, it returns presences timeseries for each spatial region.
-
-Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timeframe>
-
---folder: hdfs folder where the CDR dataset is placed
---spatial division: csv file with the format GSM tower id --> spatial region
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
-
-example: pyspark spatio_temporal_aggreation.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
-
-Results are stored into file: timeseries-<region>-<timeframe>-<spatial_division>.csv
-
-"""
 
 ARG_DATE_FORMAT = '%Y-%m-%d'
 

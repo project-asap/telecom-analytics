@@ -19,30 +19,33 @@
 # under the License.
 #
 
-from dateutil import rrule
+"""Profiles Clustering modules Module.
+
+Given a set of user profiles for specific region and weeks of year, it returns
+the typical 100 calling behaviors (clusters) and a label for each behavior
+(i.e. resident, commuter, etc.)
+
+Usage:
+     $SPARK_HOME/bin/spark-submit sociometer/clustering.py <dataset>
+
+Args:
+    dataset: The dataset location. The expected location is expected to match
+             the following pattern:
+             /profiles/<region>-<start_week>-<end_week> where start_week and
+             end_week have the following format: <ISO_year>_<ISO_week>
+
+The results are stored into hdfs: /centroids/<region>-<start_week>-<end_week>.
+
+Example:
+     $SPARK_HOME/bin/spark-submit sociometer/clustering.py /profiles/aree_roma-2015_53-2016_3
+"""
+
 from pyspark import SparkContext
 from pyspark.mllib.clustering import KMeans
 
-import datetime
 import re
 import os
 import sys
-
-"""
-Profiles Clustering modules Module
-
-Given a set of users' profiles, it returns typical calling behaviors (clusters)
-and a label for each behavior (i.e. resident, commuter, etc.)
-
-Usage: clustering.py  <region> <timeframe>
-
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
-
-example: pyspark clustering.py roma 06-2015
-
-Results are stored into hdfs: /centroids-<region>-<timeframe>
-
-"""
 
 def euclidean(v1, v2):
     return sum([abs(v1[i] - v2[i]) ** 2 for i in range(len(v1))]) ** 0.5
