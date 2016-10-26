@@ -78,17 +78,16 @@ if __name__ == '__main__':
         .filter(lambda x: x is not None) \
         .filter(lambda x: x.valid_region(cell2region)) \
         .filter(lambda x: start_date <= x.date <= end_date) \
-        .map(lambda x: ((x.user_id,
+        .map(lambda x: (x.user_id,
                          x.region(cell2region),
                          x.date,
                          x.time[:2]),
-                        1)) \
+                        ) \
         .distinct() \
-        .reduceByKey(lambda x, y: x + y) \
         .persist(StorageLevel(False, True, False, False))
 
     hourly_presence = lines.map(
-        lambda ((user_id, region, date, time), _): (
+        lambda (_, region, date, time): (
             (region, date, time), 1)).reduceByKey(lambda x, y: x + y)
 
     area = spatial_division.split('/')[-1].split('.')[0]
