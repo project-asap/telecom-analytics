@@ -39,16 +39,17 @@ def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
-def validate(date_text):
+def validate(date_text, date_format='%Y-%m-%d %X'):
 ### if the string is a date, return True (useful to filter csv header)
+    date_text = date_text.strip()
     try:
-        datetime.datetime.strptime(date_text, ' %Y-%m-%d ')
+        datetime.datetime.strptime(date_text, date_format)
         return True
     except ValueError:
         return False
-def week_month(string):
+def week_month(string, date_format='%Y-%m-%d %X'):
     #settimana del mese
-    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
+    d=datetime.datetime.strptime(string, date_format)
     return d.isocalendar()[1]
 
 def is_we(string):
@@ -89,7 +90,7 @@ def normalize(profilo):
 
 	return [(x[0],x[1],x[2],x[3],x[4]*1.0/(2 if x[2]==1 else 5)) for x in profilo]
 
-def municipio(cell_id):
+def municipio(cell_id, cell2municipi):
 	try:
 		cell2municipi[cell_id]
 		return True
@@ -138,7 +139,7 @@ for i in range(0, len(files),step):
 
     lines = sc.textFile(','.join(loc_file)) \
         .filter(lambda x: validate(x.split(';')[3])) \
-        .filter(lambda x: municipio(x.split(';')[9].replace(" ",""))) \
+        .filter(lambda x: municipio(x.split(';')[9].replace(" ",""), cell2municipi)) \
         .map(lambda x: ((x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] ), 1)) \
         .distinct() \
         .reduceByKey(lambda x, y: x + y) \
