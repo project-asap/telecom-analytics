@@ -12,12 +12,14 @@ import numpy as np
 import time
 import os,sys
 
+from urlparse import urljoin
+
 """
 Spatio-temporal Aggregation module
 
 Given a CDR dataset and a set of geographical regions, it returns presences timeseries for each spatial region.
 
-Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timeframe> 
+Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timeframe>
 
 --folder: hdfs folder where the CDR dataset is placed
 --spatial division: csv file with the format GSM tower id --> spatial region
@@ -114,20 +116,22 @@ file=open(spatial_division)
 #converting cell to municipality
 cell2municipi={k:v for k,v in [(x.split(';')[0].replace(" ",""),x.split(';')[1].replace("\n","")) for x in file.readlines()]}
 
+HDFS_BASE = 'hdfs://hdp1.itc.unipi.it:9000/'
+
 ###data loading
 #checking file existance
 #####
 sc=SparkContext()
 quiet_logs(sc)
-file_path='hdfs://hdp1.itc.unipi.it:9000/%s'%folder
+file_path = urljoin(HDFS_BASE, folder)
 print file_path
 files=[]
 nfile=[]
-for x in hdfs.ls("/"+folder)[:]:
+for x in hdfs.ls(folder)[:]:
     if "BARBERINO" in x:
         print x
         continue
-    files.append("hdfs://hdp1.itc.unipi.it:9000%s"%(x))
+    files.append(urljoin(HDFS_BASE, x))
 start=time.time()
 rddlist=[]
 
@@ -153,6 +157,3 @@ for i in range(0, len(files),step):
     print datetime.datetime.now()
     for l in  chiamate_orarie.collect():
         print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
-
-
-
