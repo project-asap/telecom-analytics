@@ -1,16 +1,10 @@
 __author__ = 'paul'
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
+from pyspark import SparkContext,StorageLevel
 import hdfs
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
 
 import time
-import os,sys
+import sys
 
 from urlparse import urljoin
 
@@ -55,7 +49,6 @@ def validate(date_text):
 def week_month(string):
     #settimana del mese
     d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
-    w=(d.day-1)//7+1
     return d.isocalendar()[1]
 
 def is_we(string):
@@ -98,7 +91,7 @@ def normalize(profilo):
 
 def municipio(cell_id):
 	try:
-		c=cell2municipi[cell_id]
+		cell2municipi[cell_id]
 		return True
 	except KeyError:
 		return False
@@ -134,8 +127,6 @@ for x in hdfs.ls(folder)[:]:
     files.append(urljoin(HDFS_BASE, x))
 start=time.time()
 rddlist=[]
-
-
 
 peaks=open('timeseries%s-%s-%s.csv'%(region,timeframe,spatial_division.split("/")[-1]),'w')
 
