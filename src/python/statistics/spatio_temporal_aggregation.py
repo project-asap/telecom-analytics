@@ -1,99 +1,158 @@
-#
-# Copyright 2015-2016 WIND,FORTH
-#
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
+__author__ = 'paul'
+import datetime
+from pyspark import SparkContext,StorageLevel,RDD
+import hdfs
+from pyspark.serializers import MarshalSerializer
+from pyspark.mllib.clustering import KMeans, KMeansModel
+from numpy import array
+from math import sqrt
+from sklearn.cluster import KMeans
+import numpy as np
 
-"""Spatio-temporal Aggregation module.
+import time
+import os,sys
+
+"""
+Spatio-temporal Aggregation module
 
 Given a CDR dataset and a set of geographical regions, it returns presences timeseries for each spatial region.
-More specifically the results are tuples containing the following information:
-<region>,<date>,<time>,<count>
 
-Usage:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
-<dataset> <spatial_division> <start_date> <end_date>
+Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timeframe> 
 
-Args:
-    dataset: The dataset location. Can be any Hadoop-supported file system URI.
-             The expected dataset schema is:
-             user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
-             The start_time column is expected to have this format: '%Y-%m-%d %X'.
-    spatial_division: File containing the mapping of cells to regions.
-    start_date: The starting date of the analysis (format: %Y-%m-%d)
-    end_date: The ending date of the analysis (format: %Y-%m-%d)
+--folder: hdfs folder where the CDR dataset is placed
+--spatial division: csv file with the format GSM tower id --> spatial region
+--region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
 
-Results are stored into the local file: timeseries-<region>-<start_date>-<end_date>
-where the <region> is derived by the spatial_division.
+example: pyspark spatio_temporal_aggreation.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
 
-Example:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
-hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv 2016-01-01 2016-01-31
+Results are stored into file: timeseries-<region>-<timeframe>-<spatial_division>.csv
+
 """
 
-__author__ = 'paul'
 
-from pyspark import SparkContext, StorageLevel
+########################functions##################################
+def quiet_logs(sc):
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
+    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+def euclidean(v1,v2):
+	print v1,v2
+	return sum([abs(v1[i]-v2[i])**2 for i in range(len(v1))])**0.5
 
-import datetime
-import string
-import sys
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in xrange(0, len(l), n):
+        yield l[i:i+n]
+def validate(date_text):
+### if the string is a date, return True (useful to filter csv header)
+    try:
+        datetime.datetime.strptime(date_text, ' %Y-%m-%d ')
+        return True
+    except ValueError:
+        return False
+def week_month(string):
+    #settimana del mese
+    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
+    w=(d.day-1)//7+1
+    return d.isocalendar()[1]
 
-from itertools import imap
-from cdr import CDR
+def is_we(string):
+    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
+    return 1 if d.weekday() in [0,6] else 0
+def day_of_week(string):
+    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
+    return d.weekday()
+def day_time(string):
+    #fascia oraria
+    time=int(string[:2])
+    if time<=8:
+    	return 0
+    elif time<=18:
+    	return 1
+    else:
+    	return 2
+
+def annota_utente(profilo,centroids,profiles):
+	for munic in set([x[0] for x in profilo]):
+		##settimana,work/we,timeslice, count normalizzato
+		obs=[x[1:] for x in profilo if x[0]==munic]
+		#carr=np.zeros(24)
+		carr=[0 for x in range(24)]
+		for o in obs:
+			idx=(o[0]-1)*6+o[1]*3+o[2]
+			carr[idx]=o[3]
+		##returns the index of the closest centroid
+		tipo_utente=sorted([(i,euclidean(carr,c)) for i,c in enumerate(centroids)],key=lambda x:x[1])[0][0]
+		yield (munic,profiles[tipo_utente])
 
 
-ARG_DATE_FORMAT = '%Y-%m-%d'
 
-if __name__ == '__main__':
-    folder = sys.argv[1]
-    spatial_division = sys.argv[2]
-    start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
-    end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
-    # spatial division: cell_id->region of interest
-    with open(spatial_division) as file:
-        # converting cell to municipality
-        cell2region = {k: v for k, v in [
-            imap(string.strip, x.split(';')) for x in file.readlines()]}
 
-    sc = SparkContext()
-    lines = sc.textFile(folder) \
-        .map(lambda x: CDR.from_string(x)) \
-        .filter(lambda x: x is not None) \
-        .filter(lambda x: x.valid_region(cell2region)) \
-        .filter(lambda x: start_date <= x.date <= end_date) \
-        .map(lambda x: (x.user_id,
-                         x.region(cell2region),
-                         x.date,
-                         x.time[:2]),
-                        ) \
+def normalize(profilo):
+##normalizza giorni chiamate su week end e  workday
+
+	return [(x[0],x[1],x[2],x[3],x[4]*1.0/(2 if x[2]==1 else 5)) for x in profilo]
+
+def municipio(cell_id):
+	try:
+		c=cell2municipi[cell_id]
+		return True
+	except KeyError:
+		return False
+
+
+##########################################################################################
+folder=sys.argv[1]
+spatial_division=sys.argv[2]
+region=sys.argv[3]
+timeframe=sys.argv[4]
+
+###spatial division: cell_id->region of interest
+
+file=open(spatial_division)
+#converting cell to municipality
+cell2municipi={k:v for k,v in [(x.split(';')[0].replace(" ",""),x.split(';')[1].replace("\n","")) for x in file.readlines()]}
+
+###data loading
+#checking file existance
+#####
+sc=SparkContext()
+quiet_logs(sc)
+file_path='hdfs://hdp1.itc.unipi.it:9000/%s'%folder
+print file_path
+files=[]
+nfile=[]
+for x in hdfs.ls("/"+folder)[:]:
+    if "BARBERINO" in x:
+        print x
+        continue
+    files.append("hdfs://hdp1.itc.unipi.it:9000%s"%(x))
+start=time.time()
+rddlist=[]
+
+
+
+peaks=open('timeseries%s-%s-%s.csv'%(region,timeframe,spatial_division.split("/")[-1]),'w')
+
+step=1
+for i in range(0, len(files),step):
+    print "week n.", i
+
+    loc_file = files[i:i + step]
+
+    lines = sc.textFile(','.join(loc_file)) \
+        .filter(lambda x: validate(x.split(';')[3])) \
+        .filter(lambda x: municipio(x.split(';')[9].replace(" ",""))) \
+        .map(lambda x: ((x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] ), 1)) \
         .distinct() \
+        .reduceByKey(lambda x, y: x + y) \
         .persist(StorageLevel(False, True, False, False))
 
-    hourly_presence = lines.map(
-        lambda (_, region, date, time): (
-            (region, date, time), 1)).reduceByKey(lambda x, y: x + y)
+    chiamate_orarie = lines.map(lambda x: ((x[0][1],x[0][2], x[0][3]), 1)).reduceByKey(lambda x, y: x + y)
+    print datetime.datetime.now()
+    for l in  chiamate_orarie.collect():
+        print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
 
-    area = spatial_division.split('/')[-1].split('.')[0]
-    name = 'timeseries_%s_%s_%s' % (area,
-                                   start_date.strftime(ARG_DATE_FORMAT),
-                                   end_date.strftime(ARG_DATE_FORMAT))
-    with open(name, 'w') as peaks:
-        for (region, date, time), count in hourly_presence.collect():
-            print >>peaks, "%s,%s,%s,%s" % (region, date, time, count)
+
+
