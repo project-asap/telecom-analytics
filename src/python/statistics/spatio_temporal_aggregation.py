@@ -140,7 +140,7 @@ for i in range(0, len(files),step):
     lines = sc.textFile(','.join(loc_file)) \
         .filter(lambda x: validate(x.split(';')[3])) \
         .filter(lambda x: municipio(x.split(';')[9].replace(" ",""), cell2municipi)) \
-        .map(lambda x: (x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] )) \
+        .map(lambda x: (x.split(';')[0],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] )) \
         .distinct() \
         .persist(StorageLevel(False, True, False, False))
 
