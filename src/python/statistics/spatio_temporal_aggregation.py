@@ -1,12 +1,8 @@
 __author__ = 'paul'
 import datetime
 from pyspark import SparkContext,StorageLevel
-import hdfs
 
-import time
 import sys
-
-from urlparse import urljoin
 
 """
 Spatio-temporal Aggregation module
@@ -110,41 +106,22 @@ file=open(spatial_division)
 #converting cell to municipality
 cell2municipi={k:v for k,v in [(x.split(';')[0].replace(" ",""),x.split(';')[1].replace("\n","")) for x in file.readlines()]}
 
-HDFS_BASE = 'hdfs://hdp1.itc.unipi.it:9000/'
-
 ###data loading
 #checking file existance
 #####
 sc=SparkContext()
 quiet_logs(sc)
-file_path = urljoin(HDFS_BASE, folder)
-print file_path
-files=[]
-nfile=[]
-for x in hdfs.ls(folder)[:]:
-    if "BARBERINO" in x:
-        print x
-        continue
-    files.append(urljoin(HDFS_BASE, x))
-start=time.time()
-rddlist=[]
 
 peaks=open('timeseries-%s-%s-%s'%(region,timeframe,spatial_division.split("/")[-1]),'w')
 
-step=1
-for i in range(0, len(files),step):
-    print "week n.", i
+lines = sc.textFile(folder) \
+    .filter(lambda x: validate(x.split(';')[3])) \
+    .filter(lambda x: municipio(x.split(';')[9].replace(" ",""), cell2municipi)) \
+    .map(lambda x: (x.split(';')[0],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] )) \
+    .distinct() \
+    .persist(StorageLevel(False, True, False, False))
 
-    loc_file = files[i:i + step]
-
-    lines = sc.textFile(','.join(loc_file)) \
-        .filter(lambda x: validate(x.split(';')[3])) \
-        .filter(lambda x: municipio(x.split(';')[9].replace(" ",""), cell2municipi)) \
-        .map(lambda x: (x.split(';')[0],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] )) \
-        .distinct() \
-        .persist(StorageLevel(False, True, False, False))
-
-    chiamate_orarie = lines.map(lambda x: ((x[1],x[2], x[3]), 1)).reduceByKey(lambda x, y: x + y)
-    print datetime.datetime.now()
-    for l in  chiamate_orarie.collect():
-        print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
+chiamate_orarie = lines.map(lambda x: ((x[1],x[2], x[3]), 1)).reduceByKey(lambda x, y: x + y)
+print datetime.datetime.now()
+for l in  chiamate_orarie.collect():
+    print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
