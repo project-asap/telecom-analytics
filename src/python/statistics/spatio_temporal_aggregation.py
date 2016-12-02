@@ -129,7 +129,7 @@ for x in hdfs.ls(folder)[:]:
 start=time.time()
 rddlist=[]
 
-peaks=open('timeseries%s-%s-%s.csv'%(region,timeframe,spatial_division.split("/")[-1]),'w')
+peaks=open('timeseries-%s-%s-%s'%(region,timeframe,spatial_division.split("/")[-1]),'w')
 
 step=1
 for i in range(0, len(files),step):
