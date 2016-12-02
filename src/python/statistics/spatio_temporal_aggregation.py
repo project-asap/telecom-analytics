@@ -140,12 +140,11 @@ for i in range(0, len(files),step):
     lines = sc.textFile(','.join(loc_file)) \
         .filter(lambda x: validate(x.split(';')[3])) \
         .filter(lambda x: municipio(x.split(';')[9].replace(" ",""), cell2municipi)) \
-        .map(lambda x: ((x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] ), 1)) \
+        .map(lambda x: (x.split(';')[1],cell2municipi[x.split(';')[9].replace(" ","")], x.split(';')[3], x.split(';')[4][:2] )) \
         .distinct() \
-        .reduceByKey(lambda x, y: x + y) \
         .persist(StorageLevel(False, True, False, False))
 
-    chiamate_orarie = lines.map(lambda x: ((x[0][1],x[0][2], x[0][3]), 1)).reduceByKey(lambda x, y: x + y)
+    chiamate_orarie = lines.map(lambda x: ((x[1],x[2], x[3]), 1)).reduceByKey(lambda x, y: x + y)
     print datetime.datetime.now()
     for l in  chiamate_orarie.collect():
         print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
