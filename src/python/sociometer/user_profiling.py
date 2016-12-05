@@ -36,6 +36,25 @@ def normalize(profilo):
 
 	return [(x[0],x[1],x[2],x[3],x[4]*1.0/(2 if x[2]==1 else 5)) for x in profilo]
 
+def array_carretto(profilo, weeks, user_id):
+    # flll the list of calls in the basket with zeros where there are no dataV
+    for munic in set([x[0] for x in profilo]):
+        # settimana, work/we,timeslice, count normalizzato
+
+        obs = [x[1:] for x in profilo if x[0] == munic]
+        print('obs:' % obs)
+        obs = sorted(obs, key=lambda d: sum(
+            [j[3] for j in obs if j[0] == d[0]]), reverse=True)
+        print('>>> obs:' % obs)
+
+        carr = [0 for x in range(len(weeks) * 2 * 3)]
+
+        for w, is_we, t, count in obs:
+            idx = (w - 1) * 6 + is_we * 3 + t
+            carr[idx] = count
+        yield munic, user_id, carr
+
+
 ##########################################################################################
 ARG_DATE_FORMAT = '%Y-%m-%d'
 
@@ -90,9 +109,7 @@ for t in weeks[::4]:
     r=r.map(lambda x: (x[0],sorted(x[1],key=lambda w: (w[0],sum([z[4] for z in x[1] if z[1]==w[1]]) ),reverse=True)))
 
     r=r.map(lambda x: (x[0],normalize(x[1])))
-
-    #normalizzazione
-
+    r = r.flatMap(lambda (user_id, l): array_carretto(l, weeks[idx:idx + 4], user_id))
 
 
     os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/%s-%s/" %(region,starting_week))
