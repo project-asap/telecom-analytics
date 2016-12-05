@@ -1,15 +1,8 @@
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
+from pyspark import SparkContext
 import time
-import os,sys 
+import os,sys
 from cdr import CDR,Dataset
-from collections import defaultdict
 from dateutil import rrule
 
 """
@@ -43,19 +36,6 @@ def normalize(profilo):
 
 	return [(x[0],x[1],x[2],x[3],x[4]*1.0/(2 if x[2]==1 else 5)) for x in profilo]
 
-#def check_complete_weeks_fast():
-#        """ week check with file names.
-#        """
-#        weeks=defaultdict(list)
-#        for x in hdfs.ls("/"+"ttmetro/roma"):
-#            for f in hdfs.ls(x):
-#                try:
-#                    print f
-#                    d=datetime.datetime.strptime(f.split("_")[5].split(".")[0], "%Y%m%d")
-#                    weeks[(d.isocalendar()[0],d.isocalendar()[1])]+=[f]
-#                except:
-#                    pass
-#        return {x:f for x,f in weeks.iteritems() if len(f)>=5}
 ##########################################################################################
 ARG_DATE_FORMAT = '%Y-%m-%d'
 
@@ -71,34 +51,11 @@ file=open(spatial_division)
 #converting cell to municipality
 cell2municipi={k:v for k,v in [(x.split(';')[0],x.split(';')[1].replace("\n","")) for x in file.readlines()]}
 
-###data loading
-#checking file existance
-#####
 sc=SparkContext()
 quiet_logs(sc)
 
 start=time.time()
 rddlist=[]
-
-
-##r= sc.textFile(','.join(files)).map(lambda row: CDR(row,field2col,'%Y%m%d',';')) \
-##    .filter(lambda x: x.valid_region(cell2municipi)) \
-##    .filter(lambda x: x.date!=None) \
-##    .map(lambda x: ((x.user_id,x.region(cell2municipi),x.week_month(),x.is_we(),x.day_of_week(),x.day_time()),1)) \
-##    .distinct() \
-##    .map(lambda x: ((x[0][:4]+(x[0][5],)),1)) \
-##    .reduceByKey(lambda x,y:x+y) \
-##    .map(lambda x: (x[0][0],[x[0][1:]+(x[1],),])) \
-##    .reduceByKey(lambda x,y:x+y)
-
-#create a dataset of CDR
-#dataset=Dataset( sc.textFile(','.join(files)).map(lambda row: CDR(row,field2col,'%Y%m%d',';')).filter(lambda x: x.date!=None).filter(lambda x: x.valid_region(cell2municipi)))
-
-###could it be useful to transform a dataset into an indexed version?
-#dataset.date_filtering_static('rome_dataset_checked')
-#for d in dataset.select_windows('01-01-2015',4): #start_date actually useless
-
-#weeks_dict=check_complete_weeks_fast()
 
 weeks = [d.isocalendar()[:2] for d in rrule.rrule(
     rrule.WEEKLY, dtstart=start_date, until=end_date
