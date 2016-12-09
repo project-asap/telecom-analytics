@@ -39,8 +39,7 @@ with open(spatial_division) as file:
 sc = SparkContext()
 quiet_logs(sc)
 
-peaks = open('timeseries-%s-%s-%s' %
-             (region, timeframe, spatial_division.split("/")[-1]), 'w')
+peaks = open('timeseries-%s-%s' % (region, timeframe), 'w')
 
 lines = sc.textFile(folder) \
     .map(lambda x: CDR.from_string(x)) \
