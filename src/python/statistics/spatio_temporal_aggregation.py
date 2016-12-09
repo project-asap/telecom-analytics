@@ -27,14 +27,7 @@ def quiet_logs(sc):
     logger = sc._jvm.org.apache.log4j
     logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
     logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
-def euclidean(v1,v2):
-	print v1,v2
-	return sum([abs(v1[i]-v2[i])**2 for i in range(len(v1))])**0.5
 
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
-        yield l[i:i+n]
 def validate(date_text, date_format='%Y-%m-%d %X'):
 ### if the string is a date, return True (useful to filter csv header)
     date_text = date_text.strip()
@@ -43,48 +36,6 @@ def validate(date_text, date_format='%Y-%m-%d %X'):
         return True
     except ValueError:
         return False
-def week_month(string, date_format='%Y-%m-%d %X'):
-    #settimana del mese
-    d=datetime.datetime.strptime(string, date_format)
-    return d.isocalendar()[1]
-
-def is_we(string):
-    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
-    return 1 if d.weekday() in [0,6] else 0
-def day_of_week(string):
-    d=datetime.datetime.strptime(string, ' %Y-%m-%d ')
-    return d.weekday()
-def day_time(string):
-    #fascia oraria
-    time=int(string[:2])
-    if time<=8:
-    	return 0
-    elif time<=18:
-    	return 1
-    else:
-    	return 2
-
-def annota_utente(profilo,centroids,profiles):
-	for munic in set([x[0] for x in profilo]):
-		##settimana,work/we,timeslice, count normalizzato
-		obs=[x[1:] for x in profilo if x[0]==munic]
-		#carr=np.zeros(24)
-		carr=[0 for x in range(24)]
-		for o in obs:
-			idx=(o[0]-1)*6+o[1]*3+o[2]
-			carr[idx]=o[3]
-		##returns the index of the closest centroid
-		tipo_utente=sorted([(i,euclidean(carr,c)) for i,c in enumerate(centroids)],key=lambda x:x[1])[0][0]
-		yield (munic,profiles[tipo_utente])
-
-
-
-
-
-def normalize(profilo):
-##normalizza giorni chiamate su week end e  workday
-
-	return [(x[0],x[1],x[2],x[3],x[4]*1.0/(2 if x[2]==1 else 5)) for x in profilo]
 
 def municipio(cell_id, cell2municipi):
 	try:
@@ -106,10 +57,7 @@ file=open(spatial_division)
 #converting cell to municipality
 cell2municipi={k:v for k,v in [(x.split(';')[0].replace(" ",""),x.split(';')[1].replace("\n","")) for x in file.readlines()]}
 
-###data loading
-#checking file existance
-#####
-sc=SparkContext()
+sc = SparkContext()
 quiet_logs(sc)
 
 peaks=open('timeseries-%s-%s-%s'%(region,timeframe,spatial_division.split("/")[-1]),'w')
@@ -122,6 +70,5 @@ lines = sc.textFile(folder) \
     .persist(StorageLevel(False, True, False, False))
 
 chiamate_orarie = lines.map(lambda x: ((x[1],x[2], x[3]), 1)).reduceByKey(lambda x, y: x + y)
-print datetime.datetime.now()
 for l in  chiamate_orarie.collect():
     print >>peaks, "%s,%s,%s,%s"%(l[0][0],l[0][1],l[0][2],l[1])
