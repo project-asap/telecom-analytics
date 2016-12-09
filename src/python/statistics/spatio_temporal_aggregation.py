@@ -8,21 +8,31 @@ from utils import quiet_logs
 
 from pyspark import SparkContext, StorageLevel
 
-"""
-Spatio-temporal Aggregation module
+"""Spatio-temporal Aggregation module.
 
 Given a CDR dataset and a set of geographical regions, it returns presences timeseries for each spatial region.
+More specifically the results are tuples containing the following information:
+<region>,<date>,<time>,<count>
 
-Usage: spatio_temporal_aggreation.py <folder> <spatial_division> <region> <timeframe>
+Usage:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
+<dataset> <spatial_division> <region> <timeframe>
 
---folder: hdfs folder where the CDR dataset is placed
---spatial division: csv file with the format GSM tower id --> spatial region
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
+Args:
+    dataset:The dataset location. Can be any Hadoop-supported file system URI.
+            The expected dataset schema is:
+            user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
+            The start_time column is expected to have this format: '%Y-%m-%d %X'.
+    spatial_division: File containing the mapping of cells to regions.
+    region: The region name featuring in the stored results
+    timeframe: The timeframe featuring in the stored results
 
-example: pyspark spatio_temporal_aggreation.py dataset_simulated/06 ../spatial_regions/aree_roma.csv roma 06-2015
+Results are stored into the local file: timeseries-<region>-<timeframe>
+where the <region> is derived by the spatial_division.
 
-Results are stored into file: timeseries-<region>-<timeframe>-<spatial_division>.csv
-
+Example:
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggreation.py \
+hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv roma 2016
 """
 
 folder = sys.argv[1]
