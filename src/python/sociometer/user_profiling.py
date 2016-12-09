@@ -65,10 +65,8 @@ def array_carretto(profilo, weeks, user_id):
         # settimana, work/we,timeslice, count normalizzato
 
         obs = [x[1:] for x in profilo if x[0] == munic]
-        print('obs:' % obs)
         obs = sorted(obs, key=lambda d: sum(
             [j[3] for j in obs if j[0] == d[0]]), reverse=True)
-        print('>>> obs:' % obs)
 
         carr = [0 for x in range(len(weeks) * 2 * 3)]
 
@@ -104,7 +102,7 @@ if __name__ == '__main__':
         .map(lambda row: CDR.from_string(row)) \
         .filter(lambda x: x is not None) \
         .filter(lambda x: x.valid_region(cell2region)) \
-        .filter(lambda x: start_date <= x.date <= end_date) \
+        .filter(lambda x: start_date <= x.date <= end_date)
 
     for t in weeks[::4]:
         idx = weeks.index(t)

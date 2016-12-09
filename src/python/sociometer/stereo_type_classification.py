@@ -88,7 +88,7 @@ if __name__ == '__main__':
     # format: (user_id, profile)
     r_auto = r.map(lambda (region, user_id, profile):
                        (region, user_type(profile, model, centroids), user_id, profile)) \
-        .map(lambda x: ((x[0], x[1]), 1)) \
+        .map(lambda x: ((region, user_type, 1)) \
         .reduceByKey(lambda x, y: x + y)
 
     # ottengo coppie municipio,id_cluster
@@ -96,10 +96,12 @@ if __name__ == '__main__':
     # risultato finale
     #
     lst = r_auto.collect()
-    sociometer = [(x[0], x[1] * 1.0 / sum([y[1]
-                                        for y in lst if y[0][0] == x[0][0]])) for x in lst]
+    sociometer = [(region,
+                   user_type,
+                   count * 1.0 / sum([count1 for ((region1, _), count1) in lst if region1 == region])
+                  ) for ((region, user_type), count) in lst]
     with open("sociometer-%s-%s-%s" %
               (region, start_week, end_week), 'w') as outfile:
         print >>outfile, "region, profile, percentage"
-        for s in sorted(sociometer, key=lambda x: x[0][0]):
-            print>>outfile, s[0][0], s[0][1].replace("\n", ""), s[1]
+        for region, user_type, count in sorted(sociometer, key=lambda x: x[0][0]):
+            print>>outfile, region, user_type.replace("\n", ""), count
