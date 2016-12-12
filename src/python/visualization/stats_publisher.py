@@ -1,55 +1,58 @@
-import json
 import datetime
+import json
+import string
 import sys
 
-"""
-Stats publisher module
+from itertools import imap
+import numpy as np
+from sets import Set
+
+"""Stats publisher module
 
 It transform the results of stats module (i.e. hourly presences computation given a spatial region) into
 json files compatible with weblyzard API
 
-Usage: stats_publisher.py <spatial_division> <region> <timeframe> 
+Usage:
+    python visualization/start_publisher.py <timeseries> <gsm> <region> <timeframe>
 
+Args:
+    timeseries: The timeseries file location.
+                The expected schema is:
+                <region>,<date>,<time>,<count>,<start-cells>
+    gsm: The gsm file location. The expected schema is:
+         <cell>;<latitude>;<longitude>
+    region: The region name featuring in the stored results
+    timeframe: The timeframe featuring in the stored results
 
---spatial division: csv file with the format GSM tower id --> spatial region
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
+Results are stored into the local file file: wl_timeseries-<region>-<timeframe>.json
 
-Note: this sample is only valid for spatial regions <torri_roma.csv>
-
-example: pyspark stats_publisher.py  ../spatial_regions/torri_roma.csv roma 06-2015
-
-Results are stored into file: timeseries-<region>-<timeframe>-<spatial_division>.csv
+Example:
+    python visualization/stats_publisher.py spatial_regions/roma_gsm.csv roma 06-2015
 """
 
-spatial_division=sys.argv[1]
-region=sys.argv[2]
-timeframe=sys.argv[3]
+timeseries_location = sys.argv[1]
+gsm = sys.argv[2]
+region = sys.argv[3]
+timeframe = sys.argv[4]
 
-geo=open('roma_gsm.csv')
-coord={x.split(";")[0][:5]:(x.split(";")[1:]) for x in geo.readlines()}
+with open(gsm) as f:
+    coord = {cell: np.array(map(float, [latitude, longitude])) for cell, latitude, longitude in [
+        imap(string.strip, l.split(';')) for l in f.readlines()[1:]]}
 
-peaks=open('../statistics/timeseries%s-%s-%s.csv'%(region,timeframe,spatial_division.split("/")[-1]))
+obs = []
+with open(timeseries_location) as timeseries:
+    for i, (area, date, time, count, start_cells) in enumerate(
+            p.strip().split(',', 4) for p in timeseries.readlines()):
+        lat, lon = np.median([coord[c] for c in eval(start_cells)], axis=0)
+        d = {"_id": i,
+             "value": count,
+             "date": str(datetime.datetime.strptime(date, '%Y-%m-%d %X') +
+                         datetime.timedelta(hours=int(time))),
+             "target_location": [{"name": area, "point": {"lat": lat, "lon": lon}}],
+             "indicator_id": "hourly presence",
+             "indicator_name": "hourly presence"}
+        obs.append(d)
 
-
-
-obs=[]
-
-for i,p in enumerate(peaks.readlines()):
-	s=p.split(",")
-	target_location=s[0]
-	loc=coord[s[0]]
-	value=s[-1]
-	date=d=datetime.datetime.strptime(s[1]+s[2], ' %Y-%m-%d %H')
-	d={}
-	d["_id"]=i
-	d["value"]=str(value).strip("\n")
-	d["date"]=str(date)
-	d["target_location"]=[{"name":target_location,"point":{"lat":loc[0],"lon":loc[1].strip("\n")}}]
-	d["indicator_id"] ="hourly presence"
-	d["indicator_name"]= "hourly presence"
-	obs.append(d)
-
-file=open("wl_timeseries%s-%s-%sarea_presence.json"%(region,timeframe,spatial_division.split("/")[-1]),"w")
-json.dump(obs,file)
-
-	
+file = open("wl_timeseries%s-%s.json" %
+            (region, timeframe), "w")
+json.dump(obs, file)
