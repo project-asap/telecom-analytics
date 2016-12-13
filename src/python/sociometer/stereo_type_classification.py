@@ -1,129 +1,104 @@
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from collections import defaultdict
-import hdfs
+import os
+import sys
+from pyspark import SparkContext
+from pyspark.mllib.clustering import KMeansModel
 
-import numpy as np
-def check_complete_weeks_fast():
-        """ week check with file names. 
-        """
-        weeks=defaultdict(int)
-        for x in hdfs.ls("/"+"ttmetro/roma"):
-            for f in hdfs.ls(x):
-                try:
-                    d=datetime.datetime.strptime(f.split("_")[6].split(".")[0], "%Y%m%d")
-                    weeks[(d.isocalendar()[0],d.isocalendar()[1])]+=1
-                except:
-                    pass
-        return [x for x in weeks if weeks[x]>=5]
+from dateutil import rrule
+from utils import quiet_logs
 
-"""
-Stereo Type Classification  Module
 
-Given a set of users' profiles and a set of labeled calling behaviors, it returns the percentage of each label
-on each spatial region. 
-E.g.: 
+"""Stereo Type Classification  Module
+
+Given a set of user profiles and a set of labeled calling behaviors, it returns the percentage of each label
+on each spatial region.
+E.g.:
 Region 1, resident, 75%
 Region 1, commuter, 20%
 ...
 
+Usage:
+    $SPARK_HOME/bin/spark-submit sociometer/stereo_type_classification.py <profiles dataset> <centroids dataset> <start_date> <end_date>
 
-Usage: stereo_type_classification.py  <region> <timeframe> 
+Args:
+    profile dataset: The profile dataset location. Can be any Hadoop-supported file system URI.
+                     The expected dataset schema is:
+                     <region>,<user_id>,<profile>.
+                     The <profile> is a 24 element list containing the sum of user calls for each time division.
+                     The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
+                     where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
+    centroids dataset: The cluster dataset location. Can be any Hadoop-supported file system URI.
+                       The expected dataset schema is:
+                       <label>,<profile>.
+                       The <profile> is a 24 element numpy array containing the cluster calls for each division.
+                       The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
+                       where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
+    start_date: The analysis starting date. Expected input %Y-%m-%d
+    end_date: The analysis ending date. Expected input %Y-%m-%d
 
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
+Results are stored into several local files: results/sociometer-<year>_<week_of_year>
+where <year> and <week_of_year> are the year and week of year index of the starting week
+of the 4 week analysis.
 
-example: pyspark stereo_type_classification.py  roma 06-2015
+Example:
+    $SPARK_HOME/bin/spark-submit \
+        sociometer/stereo_type_classification.py hdfs:///profiles/roma hdfs:///centroids/roma \
+        2016-01-01 2016-01-31
 
-Results are stored into file: sociometer-<region>-<timeframe>.csv
-
+The results will be sotred in the local files:
+results/sociometer-2015_53 etc
+results/sociometer-2016_01 etc
+results/sociometer-2016_02 etc
 """
 
 
-import os,sys
-
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
-def euclidean(v1,v2):
-
-    return sum([(v1[i]-v2[i])**2 for i in range(len(v1))])**0.5
-
-def annota_utente(profilo,profiles,id_utente):
-    def f7(seq):
-        seen = set()
-        seen_add = seen.add
-        return [x for x in seq if not (x in seen or seen_add(x))]
-    for munic in set([x[0] for x in profilo]):
-        ##settimana,work/we,timeslice, count normalizzato
-        week_ordering=f7([x[1] for x in profilo if x[0]==munic])
-        
-        obs=[x[1:] for x in profilo if x[0]==munic]
-        #carr=np.zeros(24)
-        carr=[0 for x in range(24)]
-        for o in obs:
-            week_idx=week_ordering.index(o[0])
-            if week_idx>3:
-                continue
-            idx=(week_idx-1)*6+o[1]*3+o[2]
-            carr[idx]=o[3]
-        tipo_utente=sorted([(c[0],euclidean(carr,list(c[1]))) for c in profiles],key=lambda x:x[1])[0][0]
-        if len([x for x in carr if x!=0])==1 and sum(carr)<0.5:
-            tipo_utente='passing by'
-        yield (munic,tipo_utente,id_utente,carr)
 
 
+def user_type(profile, model, centroids):
+    if len([x for x in profile if x != 0]) == 1 and sum(profile) < 0.5:
+        return 'passing by'
+    else:
+        idx = model.predict(profile)
+        cluster = model.clusterCenters[idx]
+        return centroids[cluster]
 
-sc=SparkContext()
+
+sc = SparkContext()
 quiet_logs(sc)
-##annotazione utenti
 
-##open
-region,timeframe='roma','2016_9'
+ARG_DATE_FORMAT = '%Y-%m-%d'
 
-#weeks=[(2015, 11), (2015, 12), (2015, 13), (2015, 24), (2015, 25), (2015, 26), (2015, 32), (2015, 33), (2015, 34), (2015, 35), (2015, 36), (2015, 37), (2015, 38), (2015, 39), (2015, 41), (2015, 42), (2015, 45), (2015, 46), (2015, 47), (2015, 48), (2015, 49), (2015, 50), (2015, 51), (2015, 52), (2016, 1), (2016, 2), (2016, 3), (2016, 4), (2016, 5), (2016, 6), (2016, 7), (2016, 8), (2016, 9), (2016, 11), (2016, 12), (2016, 13), (2016, 14), (2016, 15), (2016, 16), (2016, 17), (2016, 18), (2016, 19), (2016, 20), (2016, 21), (2016, 22), (2016, 24), (2016, 25)]
-#weeks=[(2015, 34), (2015, 35), (2015, 36), (2015, 37), (2015, 38), (2015, 39), (2015, 41), (2015, 42), (2015, 45), (2015, 46), (2015, 47), (2015, 48), (2015, 49), (2015, 50), (2015, 51), (2015, 52), (2016, 1), (2016, 2), (2016, 3), (2016, 4), (2016, 5), (2016, 6), (2016, 7), (2016, 8), (2016, 9), (2016, 11), (2016, 12), (2016, 13), (2016, 14), (2016, 15), (2016, 16), (2016, 17), (2016, 18), (2016, 19), (2016, 20), (2016, 21), (2016, 22), (2016, 24), (2016, 25)]
-import cPickle as pk
-weeks_dict=pk.load(open("weeks_dict.pkl","rb"))
+profiles = sys.argv[1]
+centroids = sys.argv[2]
+start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
-weeks=sorted(weeks_dict.keys())
-for timeframe in weeks:
-    print timeframe
-    try:
-        len(hdfs.ls('/profiles/'+"%s-%s_%s"%(region,timeframe[0],timeframe[1])))
-    except ValueError:
+weeks = [d.isocalendar()[:2] for d in rrule.rrule(
+    rrule.WEEKLY, dtstart=start_date, until=end_date
+)]
+
+for year, week in weeks:
+    subfolder = "%s/%s_%s" % (centroids, year, week)
+    exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
+    if exists != 0:
         continue
-    r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/centroids-%s-%s_%s'%(region,timeframe[0],timeframe[1]))
-    cntr=r.collect()
+    r = sc.pickleFile(subfolder)
+    centroids = {tuple(v.tolist()): k for k, v in r.collect()}
+    model = KMeansModel(centroids.keys())
 
-    profiles=[(x[0],x[1]) for x in cntr]
-    r=sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/'+"%s-%s_%s"%(region,timeframe[0],timeframe[1]))
-    #r_id= r.flatMap(lambda x:  annota_utente(x[1],profiles,x[0])).collect()
+    subfolder = "%s/%s_%s" % (profiles, year, week)
+    r = sc.pickleFile(subfolder)
 
-    #format: (id_utente,profilo)
-    r_auto= r.flatMap(lambda x:  annota_utente(x[1],profiles,x[0])) \
-   .map(lambda x: ((x[0],x[1]),1)) \
-   .reduceByKey(lambda x,y:x+y)
+    r_auto = r.map(lambda (region, _, profile):  ((region, user_type(profile, model, centroids)), 1)) \
+        .reduceByKey(lambda x, y: x + y)
 
-    ###save for Gabrielli
-    r_gabrielli= r.flatMap(lambda x:  annota_utente(x[1],profiles,x[0]))
+    lst = r_auto.collect()
+    sociometer = [(region,
+                    user_type,
+                    count * 1.0 / sum([c for ((r, u), c) in lst if r == region])
+                    ) for ((region, user_type), count) in lst]
 
-    os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /annotation/%s-%s_%s"%(region,timeframe[0],timeframe[1]))
-    r_gabrielli.saveAsTextFile("hdfs://hdp1.itc.unipi.it:9000/annotation/%s-%s_%s"%(region,timeframe[0],timeframe[1]))
-
-##ottengo coppie municipio,id_cluster
-
-### risultato finale
-#
-    lst=r_auto.collect()
-    sociometer=[(x[0],x[1]*1.0/sum([y[1] for y in lst if y[0][0]==x[0][0]])) for x in lst]
-    outfile=open("results/sociometer-%s-%s_%s"%(region,timeframe[0],timeframe[1]),'w')
-    print >>outfile,"municipio, profilo, percentage"
-    for s in sorted(sociometer,key=lambda x: x[0][0]):
-        print>>outfile, s[0][0],s[0][1].replace("\n",""),s[1]
-
-
+    with open("results/sociometer-%s_%s" % (year, week), 'w') as outfile:
+        print >>outfile, "region, profile, percentage"
+        for region, utype, count in sorted(sociometer, key=lambda x: x[0]):
+            print >>outfile, region, utype, count
