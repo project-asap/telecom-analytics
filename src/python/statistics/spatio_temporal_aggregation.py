@@ -17,14 +17,14 @@ More specifically the results are tuples containing the following information:
 <region>,<date>,<time>,<count>,<start-cells>
 
 Usage:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py,utils.py statistics/spatio_temporal_aggregation.py \
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggregation.py \
 <dataset> <spatial_division> <region> <timeframe>
 
 Args:
     dataset:The dataset location. Can be any Hadoop-supported file system URI.
             The expected dataset schema is:
             user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
-            The start_time column is expected to have this format: '%Y-%m-%d %X'.
+            The start_date column is expected to have this format: '%Y-%m-%d %X'.
     spatial_division: File containing the mapping of cells to regions.
     region: The region name featuring in the stored results
     timeframe: The timeframe featuring in the stored results
@@ -32,7 +32,7 @@ Args:
 Results are stored into the local file: timeseries-<region>-<timeframe>.
 
 Example:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py,utils.py statistics/spatio_temporal_aggregation.py \
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py statistics/spatio_temporal_aggregation.py \
 hdfs:///dataset_simulated/2016 spatial_regions/aree_roma.csv roma 2016
 """
 
