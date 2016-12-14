@@ -21,7 +21,9 @@ Usage:
     $SPARK_HOME/bin/spark-submit sociometer/clustering.py <profiles dataset> <region> <start_date> <end_date>
 
 Args:
-    profile dataset: The dataset location. Can be any Hadoop-supported file system URI.
+    profile dataset: The profiles dataset prefix. Can be any Hadoop-supported file system URI.
+                     The full path dataset name it computed as:
+                     <profile dataset>/<region>/<start_date>_end_date>
                      The expected dataset schema is:
                      <region>,<user_id>,<profile>.
                      The <profile> is a 24 element list containing the sum of user calls for each time division.
@@ -38,7 +40,7 @@ of the 4 week analysis.
 Example:
     $SPARK_HOME/bin/spark-submit \
         sociometer/user_profiling.py hdfs:///profiles/roma \
-        spatial_regions/aree_roma.csv roma 2016-01-01 2016-01-31
+        roma 2016-01-01 2016-01-31
 
 The results will be sotred in the hdfs files:
 /centroids/roma/2015_53
@@ -88,7 +90,7 @@ sc = SparkContext()
 quiet_logs(sc)
 # sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
 for year, week in weeks:
-    subfolder = "%s/%s_%s" % (folder, year, week)
+    subfolder = "%s/%s/%s_%s" % (folder, region, year, week)
     exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
     if exists != 0:
         continue

@@ -1,4 +1,6 @@
-$SPARK_HOME/bin/pyspark spatio_temporal_aggregation.py dataset_simulated/06 ../spatial_regions/torri_roma.csv roma 06-2015
-../visualization/weblyzard_api.py ../spatial_regions/torri_roma.csv roma 06-2015
-
+DATASET=$1
+SPARK_MASTER=$2
+export PYTHONPATH=.:$PYTHONPATH
+$SPARK_HOME/bin/spark-submit --py-files cdr.py --master $SPARK_MASTER statistics/spatio_temporal_aggregation.py $DATASET spatial_regions/aree_roma.csv roma 2016
+python visualization/stats_publisher.py timeseries-roma-2016 spatial_regions/roma_gsm.csv roma 2016
 

@@ -18,16 +18,20 @@ Region 1, commuter, 20%
 ...
 
 Usage:
-    $SPARK_HOME/bin/spark-submit sociometer/stereo_type_classification.py <profiles dataset> <centroids dataset> <start_date> <end_date>
+    $SPARK_HOME/bin/spark-submit sociometer/stereo_type_classification.py <profiles dataset> <centroids dataset> <region> <start_date> <end_date>
 
 Args:
-    profile dataset: The profile dataset location. Can be any Hadoop-supported file system URI.
+    profile dataset: The profiles dataset prefix. Can be any Hadoop-supported file system URI.
+                     The full path dataset name it computed as:
+                     <profile dataset>/<region>/<start_date>_end_date>
                      The expected dataset schema is:
                      <region>,<user_id>,<profile>.
                      The <profile> is a 24 element list containing the sum of user calls for each time division.
                      The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
                      where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
     centroids dataset: The cluster dataset location. Can be any Hadoop-supported file system URI.
+                       The full path dataset name it computed as:
+                       <centroids dataset>/<region>/<start_date>_end_date>
                        The expected dataset schema is:
                        <label>,<profile>.
                        The <profile> is a 24 element numpy array containing the cluster calls for each division.
@@ -42,8 +46,8 @@ of the 4 week analysis.
 
 Example:
     $SPARK_HOME/bin/spark-submit \
-        sociometer/stereo_type_classification.py hdfs:///profiles/roma hdfs:///centroids/roma \
-        2016-01-01 2016-01-31
+        sociometer/stereo_type_classification.py hdfs:///profiles hdfs:///centroids \
+        roma 2016-01-01 2016-01-31
 
 The results will be sotred in the local files:
 results/sociometer-2015_53 etc
@@ -70,15 +74,16 @@ ARG_DATE_FORMAT = '%Y-%m-%d'
 
 profiles = sys.argv[1]
 centroids = sys.argv[2]
-start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
-end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
+region = sys.argv[3]
+start_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
+end_date = datetime.datetime.strptime(sys.argv[5], ARG_DATE_FORMAT)
 
 weeks = [d.isocalendar()[:2] for d in rrule.rrule(
     rrule.WEEKLY, dtstart=start_date, until=end_date
 )]
 
 for year, week in weeks:
-    subfolder = "%s/%s_%s" % (centroids, year, week)
+    subfolder = "%s/%s/%s_%s" % (centroids, region, year, week)
     exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
     if exists != 0:
         continue
@@ -86,7 +91,7 @@ for year, week in weeks:
     centroids = {tuple(v.tolist()): k for k, v in r.collect()}
     model = KMeansModel(centroids.keys())
 
-    subfolder = "%s/%s_%s" % (profiles, year, week)
+    subfolder = "%s/%s/%s_%s" % (profiles, region, year, week)
     r = sc.pickleFile(subfolder)
 
     r_auto = r.map(lambda (region, _, profile):  ((region, user_type(profile, model, centroids)), 1)) \
