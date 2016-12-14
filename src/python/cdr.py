@@ -28,18 +28,20 @@ import string
 from pyspark import StorageLevel
 from itertools import imap
 
+
 class CDR:
+
     def __init__(self, **kwargs):
         [setattr(self, k, v) for k, v in kwargs.items()]
 
     @classmethod
     def from_string(cls, row, dateformat='%Y-%m-%d %X', separator=';'):
         field2col = {'user_id': 0,
-                    'cdr_type': 11,
-                    'start_cell': 9,
-                    'end_cell': 10,
-                    'date': 3,
-                    'time': 4}
+                     'cdr_type': 11,
+                     'start_cell': 9,
+                     'end_cell': 10,
+                     'date': 3,
+                     'time': 4}
         fields = list(imap(string.strip, row.split(separator)))
         try:
             d = {k: fields[field2col[k]] for k in field2col}
