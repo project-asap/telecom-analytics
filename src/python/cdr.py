@@ -28,6 +28,38 @@ import string
 from pyspark import StorageLevel
 from itertools import imap
 
+from hdfs import Config
+
+def check_complete_weeks_fast(path):
+    files, weeks = explore_input(path)
+    if len(weeks) < 5:
+        raise 'No complete 4 weeks'
+    return files, sorted(list(weeks))
+
+def explore_input(path):
+        """ week check with file names.
+        """
+        try:
+            protocol, p = path.split('://')
+            if protocol.lower() == 'hdfs':
+                c = Config().get_client()
+                # keep only files
+                files = filter(lambda (n, d): d['type'] == 'FILE', c.list(p, status=True))
+            elif protocol.lower() == 'file':
+                #TODO
+                raise Exception('Unsupported file input protocol yet')
+        except ValueError: # no protocol
+            #TODO
+            raise Exception('Unsupported no input protocol yet')
+        else:
+            date_format = '%Y%m%d'
+            t = map(lambda (_, d):
+                    ('/'.join([path, d['pathSuffix']]),
+                     datetime.datetime.strptime(d['pathSuffix'].split('.')[0].split('_')[-1],
+                                                date_format).isocalendar()[:-1]),
+                    files)
+            files, weeks = zip(*t)
+            return files, set(weeks)
 
 class CDR:
 
@@ -35,13 +67,14 @@ class CDR:
         [setattr(self, k, v) for k, v in kwargs.items()]
 
     @classmethod
-    def from_string(cls, row, dateformat='%Y-%m-%d %X', separator=';'):
-        field2col = {'user_id': 0,
-                     'cdr_type': 11,
-                     'start_cell': 9,
-                     'end_cell': 10,
-                     'date': 3,
-                     'time': 4}
+    def from_string(cls, row, field2col=None, dateformat='%Y-%m-%d %X', separator=';'):
+        if field2col is None:
+            field2col = {'user_id': 0,
+                        'cdr_type': 11,
+                        'start_cell': 9,
+                        'end_cell': 10,
+                        'date': 3,
+                        'time': 4}
         fields = list(imap(string.strip, row.split(separator)))
         try:
             d = {k: fields[field2col[k]] for k in field2col}

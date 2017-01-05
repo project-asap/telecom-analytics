@@ -1,13 +1,33 @@
-import datetime
+#
+# Copyright 2015-2016 WIND,FORTH
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
 from pyspark import SparkContext
 import time
 import os
 import sys
-from cdr import CDR, Dataset
+from cdr import CDR, Dataset, check_complete_weeks_fast
 from utils import quiet_logs
-from dateutil import rrule
 
-"""User Profiling Module
+"""
+ICP extraction (user profiling)
 
 Given a CDR dataset and a set of geographical regions, it returns user profiles
 for each spatial region. The results are tuples containing the following information:
@@ -20,34 +40,23 @@ The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <time
 where <is_weekend> can be 0 or 1.
 
 Usage:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py \
-        sociometer/user_profiling.py <dataset> <spatial division> <region> <start_date> <end_date>
+    $SPARK_HOME/bin/spark-submit --py-files cdr.py user_profiling.py <dataset path> \
+        <spatial region file> <format file> <format date> <area identifier>
 
-Args:
-    dataset:The dataset location. Can be any Hadoop-supported file system URI.
-            The expected dataset schema is:
-            user_id;null;null;start_date;start_time;duration;null;null;null;start_gsm_cell;end_gsm_cell;record_type
-            The start_date column is expected to have this format: '%Y-%m-%d %X'.
-    spatial division: csv file with the format GSM tower id --> spatial region
-    region: The region name featuring in the stored results
-    start_date: The analysis starting date. Expected input %Y-%m-%d
-    end_date: The analysis ending date. Expected input %Y-%m-%d
-
-Results are stored into several hdfs files: /profiles/<region>/<year>_<week_of_year>
-where <year> and <week_of_year> are the year and week of year index of the starting week
-of the 4 week analysis.
+Parameter:
+    dataset path: path on hdfs where the dataset is located
+    spatial region file: csv files with the association GSM antenna --> spatial region
+    field2col: file containing the format of the csv files composing the dataset
+    format date: the date format (according to python datetime module) of the cdr
+    area identifier: a string used to name the results files
 
 Example:
-    $SPARK_HOME/bin/spark-submit --py-files cdr.py \
-        sociometer/user_profiling.py hdfs:///dataset_simulated/2016 \
-        spatial_regions/aree_roma.csv roma 2016-01-01 2016-01-31
+      $SPARK_HOME/bin/spark-submit --py-files cdr.py user_profiling.py dataset_simulated ../spatial_regions/aree_roma.csv field2col_simulated.csv %Y-%m-%d roma
 
-The results will be sotred in the hdfs files:
-/profile/roma/2015_53
-/profile/roma/2016_01
-/profile/roma/2016_02 etc
+Output: profiles will be saved in this path: /profiles/<area identifier>-<year>_<week>. Week is the first week of the corresponding
+4 weeks block analyzed. These two parameters are computed inside the script, by scanning all the dataset and assigning each file to the
+corresponding week.
 """
-
 
 ########################functions##################################
 def normalize(profilo):
@@ -63,10 +72,8 @@ def array_carretto(profilo, weeks, user_id):
         # settimana, work/we,timeslice, count normalizzato
 
         obs = [x[1:] for x in profilo if x[0] == munic]
-        print('obs:' % obs)
         obs = sorted(obs, key=lambda d: sum(
             [j[3] for j in obs if j[0] == d[0]]), reverse=True)
-        print('>>> obs:' % obs)
 
         carr = [0 for x in range(len(weeks) * 2 * 3)]
 
@@ -77,13 +84,11 @@ def array_carretto(profilo, weeks, user_id):
 
 
 ##########################################################################
-ARG_DATE_FORMAT = '%Y-%m-%d'
-
 folder = sys.argv[1]
 spatial_division = sys.argv[2]
-region = sys.argv[3]
-start_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
-end_date = datetime.datetime.strptime(sys.argv[5], ARG_DATE_FORMAT)
+field2col=sys.argv[3]
+date_format=sys.argv[4]
+region=sys.argv[5]
 
 # spatial division: cell_id->region of interest
 
@@ -103,15 +108,19 @@ quiet_logs(sc)
 start = time.time()
 rddlist = []
 
-weeks = [d.isocalendar()[:2] for d in rrule.rrule(
-    rrule.WEEKLY, dtstart=start_date, until=end_date
-)]
+field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col)]}
 
-data = sc.textFile(folder) \
-    .map(lambda row: CDR.from_string(row)) \
+files, weeks = check_complete_weeks_fast(folder)
+
+###########################
+# TO BE DELETED; DO NOT COMMIT
+files = files[:2]
+##########################
+
+data = sc.textFile(','.join(files)) \
+    .map(lambda row: CDR.from_string(row, field2col, date_format)) \
     .filter(lambda x: x is not None) \
-    .filter(lambda x: x.valid_region(cell2municipi)). \
-    filter(lambda x: start_date <= x.date <= end_date)
+    .filter(lambda x: x.valid_region(cell2municipi))
 
 for t in weeks[::4]:
     idx = weeks.index(t)
