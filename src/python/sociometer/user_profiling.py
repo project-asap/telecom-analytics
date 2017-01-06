@@ -112,11 +112,6 @@ field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col
 
 files, weeks = check_complete_weeks_fast(folder)
 
-###########################
-# TO BE DELETED; DO NOT COMMIT
-files = files[:2]
-##########################
-
 data = sc.textFile(','.join(files)) \
     .map(lambda row: CDR.from_string(row, field2col, date_format)) \
     .filter(lambda x: x is not None) \
