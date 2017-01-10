@@ -30,21 +30,20 @@ from itertools import imap
 
 from hdfs import Config
 
-def check_complete_weeks_fast(path):
-    files, weeks = explore_input(path)
+def check_complete_weeks_fast(path, filter_input, extract_date):
+    files, weeks = explore_input(path, filter_input, extract_date)
     if len(weeks) < 5:
-        raise 'No complete 4 weeks'
-    return files, sorted(list(weeks))
+        raise Exception('No complete 4 weeks')
+    return files, weeks
 
-def explore_input(path):
+def explore_input(path, filter_input, extract_date):
         """ week check with file names.
         """
         try:
             protocol, p = path.split('://')
             if protocol.lower() == 'hdfs':
                 c = Config().get_client()
-                # keep only files
-                files = filter(lambda (n, d): d['type'] == 'FILE', c.list(p, status=True))
+                files = filter(filter_input, c.list(p, status=True))
             elif protocol.lower() == 'file':
                 #TODO
                 raise Exception('Unsupported file input protocol yet')
@@ -52,14 +51,12 @@ def explore_input(path):
             #TODO
             raise Exception('Unsupported no input protocol yet')
         else:
-            date_format = '%Y%m%d'
             t = map(lambda (_, d):
                     ('/'.join([path, d['pathSuffix']]),
-                     datetime.datetime.strptime(d['pathSuffix'].split('.')[0].split('_')[-1],
-                                                date_format).isocalendar()[:-1]),
+                     extract_date(d['pathSuffix'])),
                     files)
             files, weeks = zip(*t)
-            return files, set(weeks)
+            return files, sorted(list(set(weeks)))
 
 class CDR:
 

@@ -19,6 +19,7 @@
 # under the License.
 #
 
+import datetime
 from pyspark import SparkContext
 import time
 import os
@@ -60,10 +61,10 @@ corresponding week.
 
 ########################functions##################################
 def normalize(profilo):
-    # normalizza giorni chiamate su week end e  workday
+    # normalize calls made on weekend or weekdays
 
-    return [(x[0], x[1], x[2], x[3], x[4] * 1.0 / (2 if x[2] == 1 else 5))
-            for x in profilo]
+    return [(region, week_idx, is_we, day_time, count * 1.0 / (2 if is_we == 1 else 5))
+            for region, week_idx, is_we, day_time, count in profilo]
 
 
 def array_carretto(profilo, weeks, user_id):
@@ -110,7 +111,11 @@ rddlist = []
 
 field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col)]}
 
-files, weeks = check_complete_weeks_fast(folder)
+files, weeks = check_complete_weeks_fast(
+    folder,
+    lambda (n, d): d['type'] == 'FILE', # keep only files
+    lambda n: datetime.datetime.strptime(n.split('.')[0].split('_')[-1], '%Y%m%d').isocalendar()[:-1]
+)
 
 data = sc.textFile(','.join(files)) \
     .map(lambda row: CDR.from_string(row, field2col, date_format)) \
@@ -123,30 +128,32 @@ for t in weeks[::4]:
         print('No complete 4 weeks: %s' % (weeks[idx:idx + 4]))
         continue
     dataset = Dataset(data.filter(lambda x: x.week in weeks[idx:idx + 4]))
+
     starting_week = "%s_%s" % (t[0], t[1])
     r = dataset.data.map(lambda x: ((x.user_id, x.region(cell2municipi),
-                                     weeks.index(x.week), x.is_we(),
+                                     weeks[idx: idx + 4].index(x.week), x.is_we(),
                                      x.day_of_week(), x.day_time(), x.week), 1)) \
         .distinct() \
-        .map(lambda x: ((x[0][:4] + (x[0][5],)), 1)) \
+        .map(lambda ((user_id, region, week_idx, is_we, day_of_week, day_time, year), _):
+             ((user_id, region, week_idx, is_we, day_time), 1)) \
         .reduceByKey(lambda x, y: x + y) \
-        .map(lambda x: (x[0][0], [x[0][1:] + (x[1],), ])) \
+        .map(lambda  ((user_id, region, week_idx, is_we, day_time), count):
+             (user_id, [[region, week_idx, is_we, day_time, count]])) \
         .reduceByKey(lambda x, y: x + y)
 
-    r = r.map(lambda x: (x[0], sorted(x[1], key=lambda w: (
-        w[0], sum([z[4] for z in x[1] if z[1] == w[1]])), reverse=True)))
+    #r = r.map(lambda (user_id, l): (user_id, sorted(l, key=lambda w: (
+    #    w[0], sum([z[4] for z in l if z[1] == w[1]])), reverse=True)))
 
-    r = r.map(lambda x: (x[0], normalize(x[1])))
+    r = r.map(lambda (user_id, l): (user_id, normalize(l)))
     r = r.flatMap(
         lambda user_id_l: array_carretto(
             user_id_l[1],
-            weeks[
-                idx:idx + 4],
+            weeks[idx:idx + 4],
             user_id_l[0]))
 
     os.system(
         "$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/%s/%s" %
         (region, starting_week))
-    r.saveAsPickleFile("/profiles/%s/%s" % (region, starting_week))
+    r.saveAsTextFile("/profiles/%s/%s" % (region, starting_week))
 
 print "elapsed time", time.time() - start

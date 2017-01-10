@@ -1,12 +1,31 @@
-import datetime
+#
+# Copyright 2015-2016 WIND,FORTH
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
 import os
 import sys
 
 from pyspark import SparkContext
 from pyspark.mllib.clustering import KMeans
 
-
-from dateutil import rrule
+from cdr import explore_input
 from utils import quiet_logs
 
 """Profiles Clustering modules Module
@@ -30,8 +49,6 @@ Args:
                      The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
                      where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
     region: The region name featuring in the stored results
-    start_date: The analysis starting date. Expected input %Y-%m-%d
-    end_date: The analysis ending date. Expected input %Y-%m-%d
 
 Results are stored into several hdfs files: /centroids/<region>/<year>_<week_of_year>
 where <year> and <week_of_year> are the year and week of year index of the starting week
@@ -53,12 +70,8 @@ def euclidean(v1, v2):
     return sum([abs(v1[i] - v2[i]) ** 2 for i in range(len(v1))]) ** 0.5
 
 
-ARG_DATE_FORMAT = '%Y-%m-%d'
-
 folder = sys.argv[1]
 region = sys.argv[2]
-start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
-end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
 archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0
 1;resident;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5
@@ -81,23 +94,26 @@ archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.
 archetipi = [(y[1], y[2:]) for y in [x.split(';')
                                      for x in archetipi.split("\n")[:-1]]]
 
-
-weeks = [d.isocalendar()[:2] for d in rrule.rrule(
-    rrule.WEEKLY, dtstart=start_date, until=end_date
-)]
+_, weeks = explore_input(
+    folder,
+    lambda (n, d): True,
+    lambda n: tuple(map(int, n.split('/')[-1].split('_')))
+)
 
 sc = SparkContext()
 quiet_logs(sc)
 # sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
 for year, week in weeks:
-    subfolder = "%s/%s/%s_%s" % (folder, region, year, week)
-    exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
-    if exists != 0:
+    subfolder = "%s/%s_%s" % (folder, year, week)
+    #exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
+    #if exists != 0:
+    #    continue
+    r = sc.textFile(subfolder)
+    if r.isEmpty():
         continue
-    r = sc.pickleFile(subfolder)
 
     # clustering!
-    clusters = KMeans.train(r.map(lambda x: x[2]), 100, maxIterations=20,
+    clusters = KMeans.train(r.map(lambda x: eval(x)[2]), 100, maxIterations=20,
                             runs=5, initializationMode="random")
 
     tipi_centroidi = []
@@ -112,5 +128,5 @@ for year, week in weeks:
     os.system(
         "$HADOOP_HOME/bin/hadoop fs -rm -r /centroids/%s/%s_%s" %
         (region, year, week))
-    sc.parallelize(tipi_centroidi).saveAsPickleFile(
+    sc.parallelize(tipi_centroidi).saveAsTextFile(
         "/centroids/%s/%s_%s" % (region, year, week))
