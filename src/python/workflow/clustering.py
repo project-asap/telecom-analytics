@@ -1,73 +1,79 @@
-import datetime
-from pyspark import SparkContext, StorageLevel, RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-import numpy as np
-import hdfs
-import time
-import os, sys
-import cdr
-"""
-Profiles Clustering modules Module
+#
+# Copyright 2015-2016 WIND,FORTH
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
 
-Given a set of users' profiles, it returns typical calling behaviors (clusters) 
+import os
+import sys
+
+from pyspark import SparkContext
+from pyspark.mllib.clustering import KMeans
+
+from cdr import explore_input
+from utils import quiet_logs
+
+"""Profiles Clustering modules Module
+
+Given a set of user profiles, it returns typical calling behaviors (clusters)
 and a label for each behavior (i.e. resident, commuter, etc.)
+More specifically, the clustering algorithm used is mllib KMeans and
+the cluster labels are computed by the minimum euclidean distance of the cluster center
+and a number of labeled characteristic behaviors.
 
-Usage: clustering.py  <region> <timeframe> 
+Usage:
+    $SPARK_HOME/bin/spark-submit sociometer/clustering.py <profiles dataset> <region> <start_date> <end_date>
 
---region,timeframe: file name desired for the stored results. E.g. Roma 11-2015
+Args:
+    profile dataset: The profiles dataset prefix. Can be any Hadoop-supported file system URI.
+                     The full path dataset name it computed as:
+                     <profile dataset>/<region>/<start_date>_end_date>
+                     The expected dataset schema is:
+                     <region>,<user_id>,<profile>.
+                     The <profile> is a 24 element list containing the sum of user calls for each time division.
+                     The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
+                     where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
+    region: The region name featuring in the stored results
 
-example: pyspark clustering.py roma 06-2015
+Results are stored into several hdfs files: /centroids/<region>/<year>_<week_of_year>
+where <year> and <week_of_year> are the year and week of year index of the starting week
+of the 4 week analysis.
 
-Results are stored into hdfs: /centroids-<region>-<timeframe>
+Example:
+    $SPARK_HOME/bin/spark-submit \
+        sociometer/user_profiling.py hdfs:///profiles/roma \
+        roma 2016-01-01 2016-01-31
 
+The results will be sotred in the hdfs files:
+/centroids/roma/2015_53
+/centroids/roma/2016_01
+/centroids/roma/2016_02 etc
 """
 
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
-
-def array_carretto(profilo):
-    ####trasforma la lista chiamate nel carrellino, con zeri dove non ci sono dati
-    def f7(seq):
-        seen = set()
-        seen_add = seen.add
-        return [x for x in seq if not (x in seen or seen_add(x))]
-
-    for munic in set([x[0] for x in profilo]):
-        ##settimana,work/we,timeslice, count normalizzato
-
-        week_ordering = f7([x[1] for x in profilo if x[0] == munic])
-        obs = [x[1:] for x in profilo if x[0] == munic]
-        obs = sorted(obs, key=lambda d: sum([j[3] for j in obs if j[0] == d[0]]), reverse=True)
-
-        week_ordering = f7([x[0] for x in obs ])
-
-
-        carr = [0 for x in range(24)]
-
-        for o in obs:
-
-            week_idx = week_ordering.index(o[0])
-            if week_idx>4:
-                continue
-            idx = (week_idx) * 6 + o[1] * 3 + o[2]
-
-            carr[idx] = o[3]
-        yield carr,munic,profilo
 
 def euclidean(v1, v2):
     return sum([abs(v1[i] - v2[i]) ** 2 for i in range(len(v1))]) ** 0.5
 
 
-folder,region=sys.argv[1],sys.argv[2]
+folder = sys.argv[1]
+region = sys.argv[2]
 
-
-
-archetipi="""0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0
+archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0
 1;resident;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5
 2;resident; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1; 0.1
 3;dynamic_resident;0.0;0.0;0.0;1.0;1.0;1.0;0.0;0.0;0.0;1.0;1.0;1.0;0.0;0.0;0.0;1.0;1.0;1.0;0.0;0.0;0.0;1.0;1.0;1.0
@@ -85,51 +91,42 @@ archetipi="""0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;
 14;visitor;0.0;0.0;0.0;0.5;0.5;0.5;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0
 15;visitor;0.0;0.0;0.0; 0.1; 0.1; 0.1;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0;0.0"""
 
-archetipi = [(y[1], y[2:]) for y in [x.split(';') for x in archetipi.split("\n")[:-1]]]
+archetipi = [(y[1], y[2:]) for y in [x.split(';')
+                                     for x in archetipi.split("\n")[:-1]]]
 
+_, weeks = explore_input(
+    folder,
+    lambda (n, d): True,
+    lambda n: tuple(map(int, n.split('/')[-1].split('_')))
+)
 
-# import rdd with profiles
-#import cPickle as pk
-#weeks_dict=pk.load(open("weeks_dict.pkl","rb"))
-weeks_dict=cdr.check_complete_weeks_fast(folder)
-
-sc=SparkContext("spark://131.114.136.218:7077")
+sc = SparkContext()
 quiet_logs(sc)
-sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
-for timeframe in sorted(weeks_dict.keys())[3:]:
-    try:
-        len(hdfs.ls('/profiles/'+"%s-%s_%s"%(region,timeframe[0],timeframe[1])))
-    except ValueError:
+# sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
+for year, week in weeks:
+    subfolder = "%s/%s_%s" % (folder, year, week)
+    #exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
+    #if exists != 0:
+    #    continue
+    r = sc.textFile(subfolder)
+    if r.isEmpty():
         continue
-    
-    r = sc.pickleFile('hdfs://hdp1.itc.unipi.it:9000/profiles/' + "%s-%s_%s" % (region, timeframe[0],timeframe[1]))
-    #clustering!
-    print region, timeframe
 
-    r_carrelli = r.flatMap(lambda x: array_carretto(x[1]))
-
-    r_check=r_carrelli.map(lambda x: [sum(x[0][:6]),sum(x[0][6:12]),sum(x[0][12:18]),sum(x[0][-6:])])
-    #print r_check.filter(lambda x: x==sorted(x,reverse=True)).count(),r_check.filter(lambda x: x!=sorted(x,reverse=True)).count()
-   
-
-    clusters = KMeans.train(r_carrelli.map(lambda x: x[0]), 100, maxIterations=10,
-        runs=1, initializationMode="random")
-
-
+    # clustering!
+    clusters = KMeans.train(r.map(lambda x: eval(x)[2]), 100, maxIterations=20,
+                            runs=5, initializationMode="random")
 
     tipi_centroidi = []
-    #centroids annotation
-    centroidi=clusters.centers
+    # centroids annotation
+    centroidi = clusters.centers
     for ctr in centroidi:
-        tipo_centroide = sorted([(c[0], euclidean(ctr, map(float, c[1]))) for  c in archetipi], key=lambda x: x[1])[0][0]
-        l=[sum(ctr[:6]),sum(ctr[6:12]),sum(ctr[12:18]),sum(ctr[-6:])]
-        if sorted(l,reverse=True)!=l:
-            print l,ctr,tipo_centroide
-        else:
-            print "centroid ok"
+        tipo_centroide = \
+            sorted([(c[0], euclidean(ctr, map(float, c[1])))
+                    for c in archetipi], key=lambda x: x[1])[0][0]
         tipi_centroidi.append((tipo_centroide, ctr))
-    
-    os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/centroids-%s-%s_%s"%(region,timeframe[0],timeframe[1]))
-    sc.parallelize(tipi_centroidi).saveAsPickleFile("hdfs://hdp1.itc.unipi.it:9000/profiles/centroids-%s-%s_%s"%(region,timeframe[0],timeframe[1]))
 
-
+    os.system(
+        "$HADOOP_HOME/bin/hadoop fs -rm -r /centroids/%s/%s_%s" %
+        (region, year, week))
+    sc.parallelize(tipi_centroidi).saveAsTextFile(
+        "/centroids/%s/%s_%s" % (region, year, week))
