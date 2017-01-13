@@ -1,5 +1,5 @@
 #
-# Copyright 2015-2016 WIND,FORTH
+# Copyright 2015-2017 WIND,FORTH
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -123,7 +123,7 @@ for year, week in weeks:
         tipo_centroide = \
             sorted([(c[0], euclidean(ctr, map(float, c[1])))
                     for c in archetipi], key=lambda x: x[1])[0][0]
-        tipi_centroidi.append((tipo_centroide, ctr))
+        tipi_centroidi.append((tipo_centroide, list(ctr)))
 
     os.system(
         "$HADOOP_HOME/bin/hadoop fs -rm -r /centroids/%s/%s_%s" %

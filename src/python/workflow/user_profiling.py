@@ -1,5 +1,5 @@
 #
-# Copyright 2015-2016 WIND,FORTH
+# Copyright 2015-2017 WIND,FORTH
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -124,9 +124,6 @@ data = sc.textFile(','.join(files)) \
 
 for t in weeks[::4]:
     idx = weeks.index(t)
-    if len(weeks[idx:idx + 4]) < 4:
-        print('No complete 4 weeks: %s' % (weeks[idx:idx + 4]))
-        continue
     dataset = Dataset(data.filter(lambda x: x.week in weeks[idx:idx + 4]))
 
     starting_week = "%s_%s" % (t[0], t[1])
