@@ -106,5 +106,5 @@ for year, week in weeks:
 
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /annotation_global/%s" % area)
 r_gabrielli.reduceByKey(lambda x, y: x + y) \
-                .map(lambda ((user, region), l): (user, region, most_common_oneliner(l))) \
+                .map(lambda ((user, region), l): ((user, region), most_common_oneliner(l))) \
                 .saveAsTextFile('/annotation_global/%s' % area)

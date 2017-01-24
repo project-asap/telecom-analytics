@@ -1,112 +1,87 @@
+#
+# Copyright 2015-2017 WIND,FORTH
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
 import datetime
-from pyspark import SparkContext,StorageLevel,RDD
-from pyspark.serializers import MarshalSerializer
-from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
-from sklearn.cluster import KMeans
-import numpy as np
-import time
-import os,sys 
-from cdr import CDR,Dataset
-from collections import defaultdict
-import cdr
+import sys
 
-def quiet_logs(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org").setLevel(logger.Level.ERROR)
-    logger.LogManager.getLogger("akka").setLevel(logger.Level.ERROR)
+from pyspark import SparkContext
 
+from cdr import CDR, explore_input
+from utils import quiet_logs
 
+(interest_region,
+ user2label,
+ field2col,
+ date_format,
+ folder,
+ area) = sys.argv[1:7]
 
-
-def get_key_str(date,granularity):
-    """
-        :param date datetime: 
-        :param granularity text: <day> ritorna una chiave col formato (yyyy,mm,dd)
-                                 <day-hour> ritorna una chiave col formato (yyyy,mm,dd,hh)
-    """
-    if granularity=='day':
-        return date[:4],date[4:6],date[6:8]
-    elif granularity=='day-hour':
-        return date[:4],date[4:6],date[6:8],date[8:10]
-# ## Lettura dell'elenco delle antenne associate alle zone
-
-
-
-interest_region,user2label,field2col,folder=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
-
-
-
-#weeks_dict=cdr.check_complete_weeks_fast(folder)
-import cPickle as pk
-weeks_dict=pk.load(open("weeks_dict.pkl","rb"))
-files=[]
-
-for w in weeks_dict:
-    files+=weeks_dict[w]
-from pyspark.serializers import BatchedSerializer, PickleSerializer
-# sc = SparkContext(
-#     "local", "bar",
-#     serializer=PickleSerializer(),  # Default serializer
-#     # Unlimited batch size -> BatchedSerializer instead of AutoBatchedSerializer
-#     batchSize=-1  
-# )
-sc=SparkContext("spark://131.114.136.218:7077")
-
+sc = SparkContext()
 quiet_logs(sc)
-sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
+#sc._conf.set('spark.executor.memory','32g') \
+#    .set('spark.driver.memory','32g') \
+#    .set('spark.driver.maxResultsSize','0')
 
-field2col={x.split(",")[0]:int(x.split(",")[1]) for x in open(field2col).readlines()}
-f=open(user2label) 
-user2home={}
-i=0
-for row in f:
-    d=row.split(";")
-    user,region,labels=d
-
-    if 'resident' in labels.strip("\n"):
-        user2home[user]=region
-    i+=1
-    if i%1000000==0:
-        print i, "users added"
-
-user_rdd=sc.broadcast(user2home)
-
-sites2zones={}
-f=open(interest_region)
-for row in f:
-    row=row.strip().split(';')
-    sites2zones[row[0][:5]]=row[1]
-zone_rdd=sc.broadcast(sites2zones)
-
-def user_join(user):
-    if user in user_rdd.value:
-        return user_rdd.value[user]
+user_annotation = sc.textFile(user2label).map(lambda e: eval(e))
+user_cache = {}
+def get_home(user):
+    if user in user_cache:
+        return user_cache[user]
     else:
-        return "outbound"
-def zone_join(region):
-    if region in sites2zones:
-        return sites2zones[region]
-    return "out"
-results=[]
-lst=sites2zones.keys()
-from itertools import islice
-for f in files:
-	start_time=time.time()
-	date=f.strip("/"+folder).split("_")[5][:8].strip(".")
-	dataset=sc.textFile(f).filter(lambda x: x.split(";")[field2col['start_cell']][:5] in zone_rdd.value )
+        home = user_annotation \
+        .filter(lambda ((u, _), user_class): user == u and user_class == 'resident') \
+        .map(lambda ((u, r), _): (u, r)) \
+        .collectAsMap().get(user, "outbound")
+        user_cache[(user, region)] = home
+        return home
 
-	dataset=dataset.map(lambda x: (x.split(";")[field2col['user_id']],zone_rdd.value[x.split(";")[field2col['start_cell']][:5]])).distinct()
-	dataset=dataset.map(lambda x: ((user_join(x[0]),x[1],date),1)).reduceByKey(lambda x,y:x+y)
-	#os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /presence_timeseries/%s"%date)
-	#dataset.saveAsTextFile("hdfs://hdp1.itc.unipi.it:9000/presence_timeseries/%s"%date)
-	results+=dataset.collect()
+sites2zones = {}
+f = open(interest_region)
+for row in f:
+    row = row.strip().split(';')
+    sites2zones[row[0][:5]] = row[1]
 
-out_file=open("results/od_timeseries-%s.csv"%folder,"w")
-for r in results:
-    print >> out_file, "%s;%s;%s;%s"%(r[0][1],r[0][2],r[0][0],r[1])
+field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col)]}
 
+files, _ = explore_input(
+    folder,
+    lambda (n, d): d['type'] == 'FILE', # keep only files
+    lambda n: datetime.datetime.strptime(n.split('.')[0].split('_')[-1], '%Y%m%d').isocalendar()[:-1]
+)
 
+user_calls_per_region = sc.textFile(','.join(files)) \
+    .map(lambda row: CDR.from_string(row, field2col, date_format)) \
+    .filter(lambda x: x is not None) \
+    .filter(lambda x: x.start_cell[:5] in sites2zones) \
+    .map(lambda x: ((sites2zones[x.start_cell[:5]], x.date), set([x.user_id]))) \
+    .reduceByKey(lambda s1, s2: s1 | s2) \
+    .collect()
 
+home_per_region = [((get_home(user), region, date), 1)
+                      for (region, date), users in user_calls_per_region for user in users]
 
+results = sc.parallelize(home_per_region) \
+    .reduceByKey(lambda x, y : x + y) \
+    .collect()
+
+out_file=open("od_timeseries-%s.csv" % area, "w")
+for ((home, region, date), count) in results:
+    print >> out_file, "%s;%s;%s;%s"%(region, date, home, count)
