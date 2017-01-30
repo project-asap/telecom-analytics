@@ -1,7 +1,7 @@
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
-object Presence {
+object PresenceBulk {
   def main(args: Array[String]) = {
       val appName = this.getClass().getSimpleName
       val usage = (s"Usage: submit.sh ${appName} <master> <input>")
@@ -87,17 +87,20 @@ object Presence {
     val field2col: Map[String,Int] =
         Map("user_id" -> 0, "cdr_type" -> 11, "start_cell" -> 9 ,"end_cell"->10 , "date" -> 3 ,"time"-> 4)
 
-    println("Input:" + input)
     val userCallsPerDate  = sc.textFile(input)
         .map( line => CDR.from_string(line, field2col) )
         .filter ( cdr => cdr.valid_region(sites2zones) )
-        .map( cdr => (sites2zones(cdr.site), cdr.date, cdr.user_id) )
-        .distinct
+        .map( cdr => ((sites2zones(cdr.site), cdr.date), Set(cdr.user_id) ))
+        .reduceByKey( _ ++ _  )
         .collect
-        .map{ case (zone, date, user_id) => ((zone, date, getUserClass(user_id, zone)), 1) }
+        .flatMap{ case ((zone, date), users) => {
+            getClass(users, zone)
+            for(u <- users) yield (zone, date, u)
+        }}
 
     val results = sc.parallelize(userCallsPerDate)
+        .map{ case (zone, date, user) => ((zone, date, userCache((user, zone))), 1) }
         .reduceByKey( _ + _ )
-    results.saveAsTextFile("file:///archive/users/spapagian/asap/data/presence_timeseries.csv")
+    results.saveAsTextFile("file:///archive/users/spapagian/asap/data/presence_timeseries_bulk.csv")
   }
 }
