@@ -24,7 +24,8 @@ from pyspark import SparkContext
 import time
 import os
 import sys
-from cdr import CDR, Dataset, check_complete_weeks_fast
+from cdr import CDR, Dataset#, check_complete_weeks_fast
+from dateutil import rrule
 from utils import quiet_logs
 
 """
@@ -49,7 +50,9 @@ Parameter:
     spatial region file: csv files with the association GSM antenna --> spatial region
     field2col: file containing the format of the csv files composing the dataset
     format date: the date format (according to python datetime module) of the cdr
-    area identifier: a string used to name the results files
+    tag: a string used to name the results files
+    start_date: The analysis starting date. Expected input %Y-%m-%d
+    end_date: The analysis ending date. Expected input %Y-%m-%d
 
 Example:
       $SPARK_HOME/bin/spark-submit --py-files cdr.py user_profiling.py dataset_simulated ../spatial_regions/aree_roma.csv field2col_simulated.csv %Y-%m-%d roma
@@ -58,6 +61,8 @@ Output: profiles will be saved in this path: /profiles/<area identifier>-<year>_
 4 weeks block analyzed. These two parameters are computed inside the script, by scanning all the dataset and assigning each file to the
 corresponding week.
 """
+
+ARG_DATE_FORMAT='%Y-%m-%d'
 
 ########################functions##################################
 def normalize(profilo):
@@ -89,7 +94,9 @@ folder = sys.argv[1]
 spatial_division = sys.argv[2]
 field2col=sys.argv[3]
 date_format=sys.argv[4]
-region=sys.argv[5]
+tag=sys.argv[5]
+start_date = datetime.datetime.strptime(sys.argv[6], ARG_DATE_FORMAT)
+end_date = datetime.datetime.strptime(sys.argv[7], ARG_DATE_FORMAT)
 
 # spatial division: cell_id->region of interest
 
@@ -111,27 +118,32 @@ rddlist = []
 
 field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col)]}
 
-files, weeks = check_complete_weeks_fast(
-    folder,
-    lambda (n, d): d['type'] == 'FILE', # keep only files
-    lambda n: datetime.datetime.strptime(n.split('.')[0].split('_')[-1], '%Y%m%d').isocalendar()[:-1]
-)
+#files, weeks = check_complete_weeks_fast(
+#    folder,
+#    lambda (n, d): d['type'] == 'FILE', # keep only files
+#    lambda n: datetime.datetime.strptime(n.split('.')[0].split('_')[-1], '%Y%m%d').isocalendar()[:-1]
+#)
 
-data = sc.textFile(','.join(files)) \
+weeks = [d.isocalendar()[:2] for d in rrule.rrule(
+    rrule.WEEKLY, dtstart=start_date, until=end_date
+)]
+
+data = sc.textFile(folder) \
     .map(lambda row: CDR.from_string(row, field2col, date_format)) \
     .filter(lambda x: x is not None) \
-    .filter(lambda x: x.valid_region(cell2municipi))
+    .filter(lambda x: x.valid_region(cell2municipi)) \
+    .cache()
 
+#for t in weeks[::2]:
 for t in weeks[::4]:
     idx = weeks.index(t)
-    dataset = Dataset(data.filter(lambda x: x.week in weeks[idx:idx + 4]))
-
-    starting_week = "%s_%s" % (t[0], t[1])
-    r = dataset.data.map(lambda x: ((x.user_id, x.region(cell2municipi),
-                                     weeks[idx: idx + 4].index(x.week), x.is_we(),
-                                     x.day_of_week(), x.day_time(), x.week), 1)) \
+    window = weeks[idx:idx + 4]
+    dataset = Dataset(data.filter(lambda x: x.week in window))
+    r = dataset.data.map(lambda x: (x.user_id, x.region(cell2municipi),
+                                     window.index(x.week), x.is_we(),
+                                     x.day_of_week(), x.day_time())) \
         .distinct() \
-        .map(lambda ((user_id, region, week_idx, is_we, day_of_week, day_time, year), _):
+        .map(lambda (user_id, region, week_idx, is_we, day_of_week, day_time):
              ((user_id, region, week_idx, is_we, day_time), 1)) \
         .reduceByKey(lambda x, y: x + y) \
         .map(lambda  ((user_id, region, week_idx, is_we, day_time), count):
@@ -145,12 +157,11 @@ for t in weeks[::4]:
     r = r.flatMap(
         lambda user_id_l: array_carretto(
             user_id_l[1],
-            weeks[idx:idx + 4],
+            window,
             user_id_l[0]))
 
-    os.system(
-        "$HADOOP_HOME/bin/hadoop fs -rm -r /profiles/%s/%s" %
-        (region, starting_week))
-    r.saveAsTextFile("/profiles/%s/%s" % (region, starting_week))
+    output = '/profiles/%s/%s' % (tag, '_'.join(map(str, window[0])))
+    os.system("$HADOOP_HOME/bin/hadoop fs -rm -r %s" % output)
+    r.saveAsTextFile(output)
 
 print "elapsed time", time.time() - start

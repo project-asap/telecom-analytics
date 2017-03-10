@@ -32,9 +32,10 @@ from hdfs import Config
 
 def check_complete_weeks_fast(path, filter_input, extract_date):
     files, weeks = explore_input(path, filter_input, extract_date)
-    if len(weeks) < 5:
+    #if len(weeks) < 5:
+    if len(weeks) < 4:
         raise Exception('No complete 4 weeks')
-    return files, weeks
+    return files, sorted(list(weeks))
 
 def explore_input(path, filter_input, extract_date):
         """ week check with file names.
@@ -45,8 +46,7 @@ def explore_input(path, filter_input, extract_date):
                 c = Config().get_client()
                 files = filter(filter_input, c.list(p, status=True))
             elif protocol.lower() == 'file':
-                #TODO
-                raise Exception('Unsupported file input protocol yet')
+                files = [(f, {'pathSuffix': f}) for f in os.listdir(p)]
         except ValueError: # no protocol
             #TODO
             raise Exception('Unsupported no input protocol yet')
@@ -56,7 +56,7 @@ def explore_input(path, filter_input, extract_date):
                      extract_date(d['pathSuffix'])),
                     files)
             files, weeks = zip(*t)
-            return files, sorted(list(set(weeks)))
+            return files, set(weeks)
 
 class CDR:
 

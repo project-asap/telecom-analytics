@@ -19,12 +19,10 @@
 # under the License.
 #
 
-import datetime
-import sys
-
 from pyspark import SparkContext
+import sys
+from cdr import CDR
 
-from cdr import CDR, explore_input
 from utils import quiet_logs
 
 (interest_region,
@@ -32,56 +30,39 @@ from utils import quiet_logs
  field2col,
  date_format,
  folder,
- area) = sys.argv[1:7]
+ tag) = sys.argv[1:7]
 
-sc = SparkContext()
-quiet_logs(sc)
-#sc._conf.set('spark.executor.memory','32g') \
-#    .set('spark.driver.memory','32g') \
-#    .set('spark.driver.maxResultsSize','0')
 
-user_annotation = sc.textFile(user2label).map(lambda e: eval(e))
-user_cache = {}
-def get_home(user):
-    if user in user_cache:
-        return user_cache[user]
-    else:
-        home = user_annotation \
-        .filter(lambda ((u, _), user_class): user == u and user_class == 'resident') \
-        .map(lambda ((u, r), _): (u, r)) \
-        .collectAsMap().get(user, "outbound")
-        user_cache[(user, region)] = home
-        return home
+sc=SparkContext()
+#quiet_logs(sc)
 
-sites2zones = {}
-f = open(interest_region)
+user_origin = sc.textFile('/'.join([user2label, tag])) \
+    .map(lambda e: eval(e)) \
+    .filter(lambda ((user, region), user_class): user_class in ['resident', 'dynamic_resident']) \
+    .map(lambda ((user, region), _): (user, region))
+
+sites2zones={}
+f=open(interest_region)
 for row in f:
     row = row.strip().split(';')
     sites2zones[row[0][:5]] = row[1]
 
 field2col = {k: int(v) for k, v in [x.strip().split(',') for x in open(field2col)]}
 
-files, _ = explore_input(
-    folder,
-    lambda (n, d): d['type'] == 'FILE', # keep only files
-    lambda n: datetime.datetime.strptime(n.split('.')[0].split('_')[-1], '%Y%m%d').isocalendar()[:-1]
-)
+zone = lambda x: sites2zones[x.start_cell[:5]]
 
-user_calls_per_region = sc.textFile(','.join(files)) \
+results = sc.textFile(folder) \
     .map(lambda row: CDR.from_string(row, field2col, date_format)) \
     .filter(lambda x: x is not None) \
     .filter(lambda x: x.start_cell[:5] in sites2zones) \
-    .map(lambda x: ((sites2zones[x.start_cell[:5]], x.date), set([x.user_id]))) \
-    .reduceByKey(lambda s1, s2: s1 | s2) \
+	.map(lambda x: (x.user_id, (zone(x), x.date))) \
+    .distinct() \
+    .leftOuterJoin(user_origin) \
+    .map(lambda (user, ((dest, date), origin)):
+         ((origin if origin != None else 'outbound', dest, date), 1)) \
+    .reduceByKey(lambda x, y: x + y) \
     .collect()
 
-home_per_region = [((get_home(user), region, date), 1)
-                      for (region, date), users in user_calls_per_region for user in users]
-
-results = sc.parallelize(home_per_region) \
-    .reduceByKey(lambda x, y : x + y) \
-    .collect()
-
-out_file=open("od_timeseries-%s.csv" % area, "w")
-for ((home, region, date), count) in results:
-    print >> out_file, "%s;%s;%s;%s"%(region, date, home, count)
+out_file=open("od_timeseries-%s.csv" % tag, "w")
+for r in results:
+    print >> out_file,  "%s;%s;%s;%s"%(r[0][1], r[0][2], r[0][0], r[1])

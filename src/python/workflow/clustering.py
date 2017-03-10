@@ -19,13 +19,14 @@
 # under the License.
 #
 
+import datetime
 import os
 import sys
 
 from pyspark import SparkContext
 from pyspark.mllib.clustering import KMeans
 
-from cdr import explore_input
+from dateutil import rrule
 from utils import quiet_logs
 
 """Profiles Clustering modules Module
@@ -48,7 +49,9 @@ Args:
                      The <profile> is a 24 element list containing the sum of user calls for each time division.
                      The column index for each division is: <week_idx> * 6 + <is_weekend> * 3 + <timeslot>
                      where <is_weekend> can be 0 or 1 and <timeslot> can be 0, 1, or 2.
-    region: The region name featuring in the stored results
+    tag: The tag name featuring in the stored results
+    start_date: The analysis starting date. Expected input %Y-%m-%d
+    end_date: The analysis ending date. Expected input %Y-%m-%d
 
 Results are stored into several hdfs files: /centroids/<region>/<year>_<week_of_year>
 where <year> and <week_of_year> are the year and week of year index of the starting week
@@ -70,8 +73,12 @@ def euclidean(v1, v2):
     return sum([abs(v1[i] - v2[i]) ** 2 for i in range(len(v1))]) ** 0.5
 
 
+ARG_DATE_FORMAT = '%Y-%m-%d'
+
 folder = sys.argv[1]
-region = sys.argv[2]
+tag = sys.argv[2]
+start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
 
 archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0
 1;resident;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5;0.5
@@ -94,20 +101,18 @@ archetipi = """0;resident;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.0;1.
 archetipi = [(y[1], y[2:]) for y in [x.split(';')
                                      for x in archetipi.split("\n")[:-1]]]
 
-_, weeks = explore_input(
-    folder,
-    lambda (n, d): True,
-    lambda n: tuple(map(int, n.split('/')[-1].split('_')))
-)
+weeks = [d.isocalendar()[:2] for d in rrule.rrule(
+    rrule.WEEKLY, dtstart=start_date, until=end_date
+)]
 
 sc = SparkContext()
 quiet_logs(sc)
 # sc._conf.set('spark.executor.memory','32g').set('spark.driver.memory','32g').set('spark.driver.maxResultsSize','0')
 for year, week in weeks:
-    subfolder = "%s/%s_%s" % (folder, year, week)
-    #exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
-    #if exists != 0:
-    #    continue
+    subfolder = "%s/%s/%s_%s" % (folder, tag, year, week)
+    exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
+    if exists != 0:
+        continue
     r = sc.textFile(subfolder)
     if r.isEmpty():
         continue
@@ -125,8 +130,6 @@ for year, week in weeks:
                     for c in archetipi], key=lambda x: x[1])[0][0]
         tipi_centroidi.append((tipo_centroide, list(ctr)))
 
-    os.system(
-        "$HADOOP_HOME/bin/hadoop fs -rm -r /centroids/%s/%s_%s" %
-        (region, year, week))
-    sc.parallelize(tipi_centroidi).saveAsTextFile(
-        "/centroids/%s/%s_%s" % (region, year, week))
+    output = "/centroids/%s/%s_%s" % (tag, year, week)
+    os.system("$HADOOP_HOME/bin/hadoop fs -rm -r %s" % output)
+    sc.parallelize(tipi_centroidi).saveAsTextFile(output)
