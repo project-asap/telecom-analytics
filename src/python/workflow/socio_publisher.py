@@ -19,34 +19,60 @@
 # under the License.
 #
 
-import datetime
-import sys
 import json
+import datetime
 import os
+import sys
 
-folder, region = sys.argv[1], sys.argv[2]
+from dateutil import rrule
 
+from pyspark import SparkContext
 
-for f in filter(lambda f: f.startswith('sociometer-%s' % region),
-                os.listdir(folder)):
-    peaks = open(os.path.join(folder, f))
-    timeframe = f.split('-')[-1].split('_')
+"""
+Stats publisher module
+
+It transform the results of sociometer module (i.e. composition of user of an area) into
+json files compatible with weblyzard API
+
+"""
+
+ARG_DATE_FORMAT='%Y-%m-%d'
+
+sc=SparkContext()
+
+folder = sys.argv[1]
+tag = sys.argv[2]
+start_date = datetime.datetime.strptime(sys.argv[3], ARG_DATE_FORMAT)
+end_date = datetime.datetime.strptime(sys.argv[4], ARG_DATE_FORMAT)
+
+weeks = [d.isocalendar()[:2] for d in rrule.rrule(
+    rrule.WEEKLY, dtstart=start_date, until=end_date
+)]
+
+prefix = 'sociometer-%s' % tag
+file = open("%s.json" % prefix, "w")
+for year, week in weeks:
+    subfolder = "%s/%s/%s_%s" % (folder, tag, year, week)
+    exists = os.system("$HADOOP_PREFIX/bin/hdfs dfs -test -e %s" % subfolder)
+    if exists != 0:
+        continue
     obs = []
 
-    for w, p in enumerate(peaks.readlines()):
-        target_location, desc, value = p.split(" ")
-        date = datetime.datetime.strptime(str(timeframe), '(%Y, %W)')
+    timeframe = (year, week)
+    for w, p in enumerate(sc.textFile(subfolder).collect()):
+        s = p.split(" ")
+        target_location = s[0]
+        value = s[-1]
+        date = datetime.datetime.strptime(str(timeframe)+' 0', '(%Y, %W) %w')
         d = {}
         d["_id"] = "sociometer-%s"%(w)
         d["value"] = str(value).strip("\n")
         d["date"] = str(date)
         d["region_id"] = target_location
-        d["description"] = desc  # d["target_location"]=[{"name":target_location,"point":{"lat":loc[0],"lon":loc[1].strip("\n")}}]
+        d["description"] = s[1]  # d["target_location"]=[{"name":target_location,"point":{"lat":loc[0],"lon":loc[1].strip("\n")}}]
         d["indicator_id"] = "category_percentage"
         d["indicator_name"] = "category_percentage"
         obs.append(d)
-        w+=1
-    file = open("observation-sociometer%s-%s_%s.json" % (region, timeframe[0], timeframe[1]), "w")
     json.dump(obs, file)
 
 

@@ -151,7 +151,6 @@ def main(file,argv):
     dataset_uploader2(service_url, file, indicator)
 
 import glob, os
-os.chdir("./observation")
 
 if __name__ == '__main__':
     print "start"

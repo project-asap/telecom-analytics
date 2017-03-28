@@ -37,7 +37,7 @@ from utils import quiet_logs
 sc = SparkContext()
 quiet_logs(sc)
 
-#user_annotation = sc.textFile(user2label, minPartitions=60000) \
+#user_annotation = sc.textFile('/'.join([user2label, tag]), minPartitions=60000) \
 user_annotation = sc.textFile('/'.join([user2label, tag])) \
     .map(lambda e: eval(e))
 
@@ -58,6 +58,7 @@ l = sc.textFile(folder) \
     .filter(lambda x: x.start_cell[:5] in sites2zones) \
     .map(lambda x: ((x.user_id, zone(x)), x.date)) \
     .leftOuterJoin(user_annotation) \
+    .distinct() \
     .map(lambda ((user_id, region), (date, user_class)):
          ((user_class if user_class != None else 'not classified', region, date), 1)) \
     .reduceByKey(lambda x, y: x + y) \

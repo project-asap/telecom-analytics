@@ -107,9 +107,9 @@ for year, week in weeks:
                  user_class,
                  count * 1.0 / sum([c for ((r, uc), c) in lst if r == region]))
                 for ((region, user_class), count) in lst]
-    outfile=open("sociometer-%s-%s_%s"%(tag, year, week),'w')
-    for region, uclass, count in sorted(sociometer, key = lambda x: x[0]):
-        print>>outfile, region, uclass, count
+    output = '/sociometer/%s/%s_%s' % (tag, year, week)
+    os.system("$HADOOP_HOME/bin/hadoop fs -rm -r %s" % output)
+    sc.parallelize(sorted(sociometer, key = lambda x: x[0])).saveAsTextFile(output)
 
 os.system("$HADOOP_HOME/bin/hadoop fs -rm -r /annotation_global/%s" % tag)
 r_gabrielli.reduceByKey(lambda x, y: x + y) \

@@ -58,6 +58,7 @@ results = sc.textFile(folder) \
 	.map(lambda x: (x.user_id, (zone(x), x.date))) \
     .distinct() \
     .leftOuterJoin(user_origin) \
+    .distinct() \
     .map(lambda (user, ((dest, date), origin)):
          ((origin if origin != None else 'outbound', dest, date), 1)) \
     .reduceByKey(lambda x, y: x + y) \

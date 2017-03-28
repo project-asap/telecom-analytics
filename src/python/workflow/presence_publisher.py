@@ -32,26 +32,30 @@ json files compatible with weblyzard API
 
 """
 
-folder = sys.argv[1]
+tag = sys.argv[1]
 
-peaks = open('presence_timeseries-%s.csv' % folder)
+#weeks_dict=check_complete_weeks_fast(folder)
+w=0
 
+
+peaks = open("presence_timeseries-%s.csv" % tag)
 obs = []
 
 for i, p in enumerate(peaks.readlines()):
-	target_location, date, class_label, value = p.split(";")
-	date = datetime.datetime.strptime(s[1], '%Y%m%d')
+
+	s = p.split(";")
+	target_location = s[0]
+	value = s[-1]
+	date = datetime.datetime.strptime(s[1], '%Y-%m-%d %X')
 	d = {}
-	d["_id"] = "presence-%s"%(i)
+	d["_id"] = "presence-%s"%(w)
 	d["value"] = str(value).strip("\n")
 	d["date"] = str(date)
 	d["region_id"] = target_location
-    d["description"] = class_label  # d["target_location"]=[{"name":target_location,"point":{"lat":loc[0],"lon":loc[1].strip("\n")}}]
+	d["description"] = s[2]  # d["target_location"]=[{"name":target_location,"point":{"lat":loc[0],"lon":loc[1].strip("\n")}}]
 	d["indicator_id"] = "area_presence"
 	d["indicator_name"] = "area_presence"
 	obs.append(d)
 	w+=1
-file = open("observation-area_presence%s.json"%folder, "w")
+file = open("area_presence-%s.json" % tag, "w")
 json.dump(obs, file)
-
-
