@@ -1,18 +1,34 @@
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
+import org.joda.time.format.DateTimeFormat
+
+import java.io._
+
 object PresenceNestedBulk {
+    def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit) {
+        val p = new java.io.PrintWriter(f)
+        try { op(p)  } finally { p.close()  }
+    }
+
   def main(args: Array[String]) = {
       val appName = this.getClass().getSimpleName
-      val usage = (s"Usage: submit.sh ${appName} <master> <input>")
+      val usage = (s"Usage: submit.sh ${appName} <master> <interestRegion> <user2label> <field2col> <dateFormat> <input> <tag>")
 
-      if (args.length != 2) {
+      if (args.length != 7) {
           System.err.println(usage)
           System.exit(1)
       }
 
      val master = args(0)
-     val input = args(1)
+     val interestRegion = args(1)
+     val user2label = args(2)
+     //val field2col = args(3)
+     val field2col: Map[String,Int] =
+        Map("user_id" -> 0, "cdr_type" -> 11, "start_cell" -> 9 ,"end_cell"->10 , "date" -> 3 ,"time"-> 4)
+     val dateFormat = args(4)
+     val input = args(5)
+     val tag = args(6)
 
      val conf = new SparkConf().setAppName(appName).setMaster(master)
         .set("spark.serializer","org.apache.spark.serializer.KryoSerializer")
@@ -20,26 +36,9 @@ object PresenceNestedBulk {
         .registerKryoClasses(Array(classOf[Array[Double]],classOf[Array[Int]]))
 
     val sc = new SparkContext()
-/*
     val pattern = """\(\(u'(\S*)', '(\S)'\), '(dynamic_resident|visitor|resident|commuter|passing\ by)'\)""".r
-    val s1 = "((u'107451309044480586', '2'), 'dynamic_resident')"
-    val s2 = "((u'92863552200163866', '4'), 'passing by')"
-    val s3 = "((u'29917139386874174', '5'), 'commuter')"
 
-    val user2label = "/annotation_global/forth"
-*/
-    val pattern = """\(u'(\S*)', '(\S)', '(dynamic_resident|visitor|resident|commuter|passing\ by)'\)""".r
-/*
-    val s1 = "(u'106541285272914564', '1', 'passing by')"
-    val s2 = "(u'205799597446887730', '3', 'commuter')"
-    val s3 = "(u'135520406994217194', '1', 'dynamic_resident')"
-
-    s1 match {case pattern(user, region, user_class) => print("ole")}
-    s2 match {case pattern(user, region, user_class) => print("ole")}
-    s3 match {case pattern(user, region, user_class) => print("ole")}
-*/
-    val user2label = "hdfs://sith0:9000/user/spapagian/user2label.csv"
-    val user_annotation = sc.textFile(user2label).map{
+    val user_annotation = sc.textFile(s"${user2label}/${tag}").map{
         case pattern(user, region, user_class) => ((user, region), user_class)
     }
 
@@ -67,7 +66,7 @@ object PresenceNestedBulk {
     getUserClass("107451309044480586", "2")
     println("<<<" + userCache)
 */
-    def getClass(users: Set[String], region: String) = {
+    def users2class(users: Set[String], region: String) = {
         val rest = users.filter( u => !(userCache contains (u, region)) )
         val results = user_annotation
             .filter{ case ((u, r), _) => rest.contains(u) && r == region }
@@ -78,15 +77,12 @@ object PresenceNestedBulk {
             .map(u => (u, region) -> "not classified").toMap
     }
 
-//    getClass(Set("29917139386874174", "107451309044480586", "invalid"), "5")
+//    users2class(Set("29917139386874174", "107451309044480586", "invalid"), "5")
 
-    val interestRegion = "hdfs://sith0:9000/user/spapagian/aree_roma.csv"
 
     val sites2zones  = sc.textFile(interestRegion).map(_.split(";")).map{
         case a => (a(0).substring(0, 5), a(1))}.collectAsMap.toMap
 
-    val field2col: Map[String,Int] =
-        Map("user_id" -> 0, "cdr_type" -> 11, "start_cell" -> 9 ,"end_cell"->10 , "date" -> 3 ,"time"-> 4)
 
     val results  = sc.textFile(input)
         .map( line => CDR.from_string(line, field2col) )
@@ -94,11 +90,22 @@ object PresenceNestedBulk {
         .map( cdr => ((sites2zones(cdr.site), cdr.date), Set(cdr.user_id) ))
         .reduceByKey( _ ++ _  )
         .flatMap{ case ((zone, date), users) => {
-            getClass(users, zone)
+            users2class(users, zone)
             for(u <- users) yield (zone, date, u)
         }}
         .map{ case (zone, date, user) => ((zone, date, userCache((user, zone))), 1) }
         .reduceByKey( _ + _ )
-    results.saveAsTextFile("file:///archive/users/spapagian/asap/data/presence_timeseries_nested_bulk.csv")
+        .collect
+
+
+    val datePattern = "yyyy-MM-dd"
+    val timePattern = "HH:mm:ss"
+    val datetimeDelim = " "
+    val datetimePattern = Array(datePattern, timePattern).mkString(datetimeDelim)
+    val datetimeFormat = DateTimeFormat.forPattern(datetimePattern)
+
+    printToFile(new File(s"presence_timeseries-${tag}.csv")) { p =>
+        results.foreach{ case ((zone, date, user_class), count) => p.println(s"${zone};${datetimeFormat.print(date)};${user_class};${count}") }
+    }
   }
 }
